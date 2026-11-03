@@ -1,0 +1,4 @@
+interface:
+  display_name: "敬业平台同步"
+  short_description: "导入敬业运输事实、校验磅单附件并安全同步至运输平台"
+  default_prompt: "使用 $jingye-platform-sync 导入本地敬业运单并生成安全的 dry-run 同步报告。"

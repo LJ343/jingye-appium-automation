@@ -1,0 +1,8 @@
+# Observed direct imports on Python 3.12.10, 2026-11-03. Not a portable lockfile.
+Appium-Python-Client==5.3.1
+openpyxl==3.1.5
+oss2==2.19.1
+pillow==12.2.0
+PyMuPDF==1.27.2.3
+requests==2.33.1
+selenium==4.45.0

@@ -1,0 +1,20 @@
+# Local credentials and generated data
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.log
+*.sqlite*
+*.db
+*.db-*
+*.pdf
+*.xlsx
+*.xls
+*.apk
+*.part
+data/
+output/
+logs/
+.venv/
+venv/

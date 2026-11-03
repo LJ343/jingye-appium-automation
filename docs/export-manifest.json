@@ -1,0 +1,280 @@
+{
+  "schema": "sanitized-usb-baseline-v1",
+  "date": "2026-11-03",
+  "timezone": "Asia/Shanghai",
+  "wireless_tested": false,
+  "production_files_modified": false,
+  "files": [
+    {
+      "path": "workspace/skills/jingye-platform-sync/.env.example",
+      "source_sha256": "de347861c05cf58e6b4e7e1626370144587824d4c3760dd9fa3ae72c25b4c71d",
+      "export_sha256": "de347861c05cf58e6b4e7e1626370144587824d4c3760dd9fa3ae72c25b4c71d",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/.gitignore",
+      "source_sha256": "69aa73cf5bc3377a7d97f2e8d2bb773195815efe225af7f1be6f5b9306bbe14f",
+      "export_sha256": "69aa73cf5bc3377a7d97f2e8d2bb773195815efe225af7f1be6f5b9306bbe14f",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/agents/openai.yaml",
+      "source_sha256": "58044b620231f2afbaff809097a13212fe12231e799bd602348f690b488752bd",
+      "export_sha256": "58044b620231f2afbaff809097a13212fe12231e799bd602348f690b488752bd",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/references/business-facts.md",
+      "source_sha256": "1a06b75eac7a2cd0bf16506b630b133786a67f93c46663271de2e44dfb695a81",
+      "export_sha256": "0587ae86a78e6b55c154b4703273227e7151d4bd7276d6123bcec90e67c7c6f6",
+      "redactions": {
+        "vehicle_identifier_replaced": 1
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/run_daily_sync.ps1",
+      "source_sha256": "0f7bd68d7f3561bfa4de2605d05c1bda2c65245ba462a6a7dd383ab0ec1021ec",
+      "export_sha256": "0f7bd68d7f3561bfa4de2605d05c1bda2c65245ba462a6a7dd383ab0ec1021ec",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/run_weekly_backfill.ps1",
+      "source_sha256": "979e9206bd56e20ccbee1b6dcdd46e83944ab2618f0874ab1ff789dc0435ff4e",
+      "export_sha256": "979e9206bd56e20ccbee1b6dcdd46e83944ab2618f0874ab1ff789dc0435ff4e",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/scripts/jingye_pipeline.py",
+      "source_sha256": "c2e82693bb3dba2794633e6d1789839d5f29898361b74c3710f140d155124301",
+      "export_sha256": "c2e82693bb3dba2794633e6d1789839d5f29898361b74c3710f140d155124301",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/scripts/jingye_store.py",
+      "source_sha256": "c3145b1d61d7aba6a498a360716e1c943956b98221bb1abc24141e218ea062df",
+      "export_sha256": "c3145b1d61d7aba6a498a360716e1c943956b98221bb1abc24141e218ea062df",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/scripts/jingye_sync.py",
+      "source_sha256": "58e17bad1989e9ecf7373b2fb2563ab996a1ca53b8034ed4b58d52c85a35bea8",
+      "export_sha256": "58e17bad1989e9ecf7373b2fb2563ab996a1ca53b8034ed4b58d52c85a35bea8",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/scripts/jingye_vlm.py",
+      "source_sha256": "7ed0a86850139b018410545299f5b824a0af8291f4e264616971747a549b437f",
+      "export_sha256": "7ed0a86850139b018410545299f5b824a0af8291f4e264616971747a549b437f",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/SKILL.md",
+      "source_sha256": "00e3a4cf6df9a919c8f126f94713e4389815d249b67b7a11f6e238e324d338ca",
+      "export_sha256": "00e3a4cf6df9a919c8f126f94713e4389815d249b67b7a11f6e238e324d338ca",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/tests/test_freight_instances.py",
+      "source_sha256": "b98159b74c666f8410b9eb513d829976c710de3d028a10dcd7378c01f05a06c8",
+      "export_sha256": "923e2f44ed98244f00fc5e78f73829d35e32cfddf573c531e25245d3c9d80a55",
+      "redactions": {
+        "account_or_sample_phone_replaced": 1,
+        "vehicle_identifier_replaced": 1
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/tests/test_missing_pdf_recovery.py",
+      "source_sha256": "21ba8a1a3bc8baea43dfe513d767e2999072c6515bd337549791adc4d15ff5f7",
+      "export_sha256": "108eb78ef5e5551a32108f0dba2549d56a64bddf570e67fecc5e991ccc7e1a40",
+      "redactions": {
+        "vehicle_identifier_replaced": 3
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/tests/test_pipeline_account_email.py",
+      "source_sha256": "0ce1997934d7a52ad5c1d661495ef7b68f90ae8e20b117e65ef29ba9bc12385f",
+      "export_sha256": "9d1456295df1c8dcacfd161994dd65b81863abccf2d7ad9cb313c2533206bd96",
+      "redactions": {
+        "account_or_sample_phone_replaced": 9,
+        "vehicle_identifier_replaced": 2
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/tests/test_pipeline_windows.py",
+      "source_sha256": "6b84174ec8c3a1197165e1a437bb60b0fd4acf57034f224bb4a301cade59a98e",
+      "export_sha256": "6b84174ec8c3a1197165e1a437bb60b0fd4acf57034f224bb4a301cade59a98e",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-platform-sync/tests/test_successful_submission_reuse.py",
+      "source_sha256": "4e33ac4d59007d8b52387bce9c0eb61019f0e387bbd0af03fec16fb99670a753",
+      "export_sha256": "4e33ac4d59007d8b52387bce9c0eb61019f0e387bbd0af03fec16fb99670a753",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/build_reconciliation_snapshot.py",
+      "source_sha256": "2e2374af7a094140f219e18fa3edba84bd765b9542f402bcd3cc24fdf0bb293c",
+      "export_sha256": "2e2374af7a094140f219e18fa3edba84bd765b9542f402bcd3cc24fdf0bb293c",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/creat_excel.py",
+      "source_sha256": "1593632441ff99b42c9d4db0d6c8d411850ce8b969eae670177ea65cc5d3c3bd",
+      "export_sha256": "1593632441ff99b42c9d4db0d6c8d411850ce8b969eae670177ea65cc5d3c3bd",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/freight_confirmation.py",
+      "source_sha256": "35fb9a98bff3b6c82f7a48f5f1b5f381950af3696738ac35bb5ca3b6d97ad23a",
+      "export_sha256": "35fb9a98bff3b6c82f7a48f5f1b5f381950af3696738ac35bb5ca3b6d97ad23a",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/jingye_reconcile.py",
+      "source_sha256": "c489411d863fd02987b13f3486c49245c13ed49ba1cce7aa80d5a7dd9772a1c6",
+      "export_sha256": "c489411d863fd02987b13f3486c49245c13ed49ba1cce7aa80d5a7dd9772a1c6",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/result_check.py",
+      "source_sha256": "68c0dea302638a7ed2ce48665863792ce71cc503330f3e5c4b40adb96493132a",
+      "export_sha256": "bb5294eb7950b85c041fddf6cd590126b24845a8ae2c3d7d80c45b17798e01e8",
+      "redactions": {
+        "hardcoded_api_secret_removed": 1,
+        "private_email_replaced": 7,
+        "sensitive_env_default_removed": 1
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/scripts/yyb_search.py",
+      "source_sha256": "f816dcadd7aefc0f64d4b2ad713ac10fbce130dd71562151afd02842adff26c3",
+      "export_sha256": "bd67aa050c090f6c0c02fe98358abc2754be96cd3c8dec5c2181f0d2235cced8",
+      "redactions": {
+        "hardcoded_api_secret_removed": 2,
+        "account_or_sample_phone_replaced": 17,
+        "vehicle_identifier_replaced": 12,
+        "device_unique_serial_replaced": 1
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/SKILL.md",
+      "source_sha256": "7c62e2c78006462ab384707ba5f8f4dccfd5f833e88c03eb2faad28543697e6a",
+      "export_sha256": "7c62e2c78006462ab384707ba5f8f4dccfd5f833e88c03eb2faad28543697e6a",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/tests/test_freight_matching.py",
+      "source_sha256": "30cbd333b18711b3b3371fb0a606059041203de06f52ab36e401b2f879e17ded",
+      "export_sha256": "52577f32fd91eb093847350be7af8807a34f048e618557a49f4cbf6227f8488c",
+      "redactions": {
+        "vehicle_identifier_replaced": 1
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/tests/test_yyb_download_recovery.py",
+      "source_sha256": "6c314dfeb23f1396bf97b5ca990e2406904051c1f9eb1055207af090dcdab2cf",
+      "export_sha256": "864f9c3c9a4a5297efd19b8067abb689e9081065c44e792679424ba6ef5923f5",
+      "redactions": {
+        "account_or_sample_phone_replaced": 3,
+        "vehicle_identifier_replaced": 3,
+        "device_unique_serial_replaced": 4
+      },
+      "byte_identical": false
+    },
+    {
+      "path": "operations/Appium.ps1",
+      "source_sha256": "e22d3581de04ddfe947c0f894524b87d774ae5eb21107ad5a73d2950c39559fd",
+      "export_sha256": "e22d3581de04ddfe947c0f894524b87d774ae5eb21107ad5a73d2950c39559fd",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Manage.ps1",
+      "source_sha256": "ba62e786b4b576241e3233934c5f8e2323c16fb204cf533426209f8a7b74f09a",
+      "export_sha256": "ba62e786b4b576241e3233934c5f8e2323c16fb204cf533426209f8a7b74f09a",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Start.cmd",
+      "source_sha256": "50220852036b5e4a4bca90d09e18d0ffb79aab6866791001f11f542ae9a25553",
+      "export_sha256": "50220852036b5e4a4bca90d09e18d0ffb79aab6866791001f11f542ae9a25553",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Status.cmd",
+      "source_sha256": "db51c4fa4f2d2b42ebea83d353118435345c27db1566d3d8c6a5cfffbb8f3afa",
+      "export_sha256": "db51c4fa4f2d2b42ebea83d353118435345c27db1566d3d8c6a5cfffbb8f3afa",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Watch.cmd",
+      "source_sha256": "fe351c187d3584d48101c54bceaf19f08cf7ef51eb4bf7358e6674436ad1ca7d",
+      "export_sha256": "fe351c187d3584d48101c54bceaf19f08cf7ef51eb4bf7358e6674436ad1ca7d",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Logs.cmd",
+      "source_sha256": "52a7e137d223d4c4bf97afe4e6d5a7b5585cf2fa864c762fc0263d3c839e529b",
+      "export_sha256": "52a7e137d223d4c4bf97afe4e6d5a7b5585cf2fa864c762fc0263d3c839e529b",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-Stop.cmd",
+      "source_sha256": "b5a95d92f40401719fa33f1c11c9c26b8d61866c4118f0269ab9e20c3d2a1fd8",
+      "export_sha256": "b5a95d92f40401719fa33f1c11c9c26b8d61866c4118f0269ab9e20c3d2a1fd8",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Appium-使用说明.md",
+      "source_sha256": "f2e1c186a6d007909ac0ee11fe6ec9967e8b96cc6dbdc0434a0a60e655ace61d",
+      "export_sha256": "f2e1c186a6d007909ac0ee11fe6ec9967e8b96cc6dbdc0434a0a60e655ace61d",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/Run-JingyeSyncWait.ps1",
+      "source_sha256": "e56a6bcfeba737b506dd44bcba2bfb36d9bc82868bf2956e5508888dc4d8d984",
+      "export_sha256": "e56a6bcfeba737b506dd44bcba2bfb36d9bc82868bf2956e5508888dc4d8d984",
+      "redactions": {},
+      "byte_identical": true
+    },
+    {
+      "path": "operations/WaitAdapter.Core.ps1",
+      "source_sha256": "a7596332ba5ecf926536b73988efe32949f3ef749dbcfe64c115371c124d2aac",
+      "export_sha256": "a7596332ba5ecf926536b73988efe32949f3ef749dbcfe64c115371c124d2aac",
+      "redactions": {},
+      "byte_identical": true
+    }
+  ],
+  "unresolved_import_roots": []
+}
