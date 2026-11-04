@@ -5,10 +5,10 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-$Node='C:\Users\SXL\AppData\Local\nvm\v22.22.2\node.exe'
-$Cli='C:\Users\SXL\AppData\Local\nvm\v22.22.2\node_modules\appium\index.js'
+$Node='C:\Users\YOUR_USER\AppData\Local\nvm\v22.22.2\node.exe'
+$Cli='C:\Users\YOUR_USER\AppData\Local\nvm\v22.22.2\node_modules\appium\index.js'
 $LogRoot='D:\openclaw_data\logs\appium'
-$NativePython='C:\Users\SXL\OpenClawNative\python-venv\Scripts\'
+$NativePython='C:\Users\YOUR_USER\OpenClawNative\python-venv\Scripts\'
 $SkillRoot=Join-Path (Split-Path $PSScriptRoot -Parent) 'workspace\skills\'
 
 function Read-Server {
@@ -27,7 +27,7 @@ function Read-Business {
         }
         if($image.StartsWith($NativePython,[StringComparison]::OrdinalIgnoreCase) -or
            $command.IndexOf($SkillRoot,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-           $command.IndexOf('C:\Users\SXL\.qclaw\',[StringComparison]::OrdinalIgnoreCase) -ge 0){
+           $command.IndexOf('C:\Users\YOUR_USER\.qclaw\',[StringComparison]::OrdinalIgnoreCase) -ge 0){
             $busy += [int]$item.ProcessId
         }
     }

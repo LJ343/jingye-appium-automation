@@ -1,7 +1,7 @@
 # 敬业数据补录 - 每周三执行，自动计算前一周日期范围
 $env:PYTHONIOENCODING = 'utf-8'
-$py = 'C:\Users\SXL\OpenClawNative\python-venv\Scripts\python.exe'
-$script = 'C:\Users\SXL\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
+$py = 'C:\Users\YOUR_USER\OpenClawNative\python-venv\Scripts\python.exe'
+$script = 'C:\Users\YOUR_USER\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
 $baseDir = 'D:\openclaw_data\data\jingyeapp'
 
 # 执行当天日期

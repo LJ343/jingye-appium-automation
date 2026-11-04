@@ -1,3 +1,7 @@
+# Wireless release: local deployment verified
+
+The release owner has deployed the reviewed wireless runtime locally and passed independent postdeployment verification. See the [wireless release record](docs/WIRELESS_RELEASE.md) for scoped tests, the recovered account crawl and ongoing, not completed three-hour connection observation. USB main remains the preserved baseline. This staging exporter has performed no Git publication. The USB baseline description below remains historical context.
+
 # 敬业 Appium 自动化
 
 归档敬业平台同步与敬业对账两项技能的 **USB有线基线**。基线日期：2026-11-03，Asia/Shanghai。

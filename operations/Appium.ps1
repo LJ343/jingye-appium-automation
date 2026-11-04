@@ -1,10 +1,11 @@
 param([ValidateSet('Status','Start')][string]$Action = 'Status')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$Node = 'C:\Users\SXL\AppData\Local\nvm\v22.22.2\node.exe'
-$Package = 'C:\Users\SXL\AppData\Local\nvm\v22.22.2\node_modules\appium\package.json'
-$Cli = 'C:\Users\SXL\AppData\Local\nvm\v22.22.2\node_modules\appium\index.js'
+$Node = 'C:\Users\YOUR_USER\AppData\Local\nvm\v22.22.2\node.exe'
+$Package = 'C:\Users\YOUR_USER\AppData\Local\nvm\v22.22.2\node_modules\appium\package.json'
+$Cli = 'C:\Users\YOUR_USER\AppData\Local\nvm\v22.22.2\node_modules\appium\index.js'
 $LogRoot = 'D:\openclaw_data\logs\appium'
+$RuntimePolicy = [ordered]@{unhandled_rejections='warn';trace_warnings=$true;scope='appium_child_process_only'}
 $Pins = @{
     $Node = 'ae1a50511be58e987483fdbc12125407443926d2d394669ade2352776e920dd3'
     $Package = '5f149e4be5dd635b912e36d054d74d060cc079bfed9cc3add3a03b547e203327'
@@ -79,7 +80,8 @@ function Get-Status {
     if ($owners.Count -eq 1 -and $owners[0].matches_fixed_node) {$health=Get-Health}
     [ordered]@{action='Status';observed_at=(Get-Date -Format o);port=4723;listener_count=$listeners.Count;
         owners=$owners;health=$health;dependencies=(Get-Dependencies);log_root=$LogRoot;
-        note='Status never starts, stops, or changes an Appium/device session.'}
+        configured_runtime_policy=$RuntimePolicy;owner_runtime_policy_verified=$false;
+        note='Status never starts, stops, or changes an Appium/device session. Configured runtime policy applies to starts through this launcher; current owner arguments are not inspected.'}
 }
 if ($Action -eq 'Status') { Get-Status | ConvertTo-Json -Depth 8; exit 0 }
 
@@ -102,13 +104,14 @@ try {
     $stdout=Join-Path $LogRoot ($tag+'.stdout.log'); $stderr=Join-Path $LogRoot ($tag+'.stderr.log')
     if ((Test-Path -LiteralPath $stdout) -or (Test-Path -LiteralPath $stderr)) { throw 'new_log_name_collision' }
     if (@(Get-Listeners).Count -gt 0) { Get-Status | ConvertTo-Json -Depth 8; throw 'listener_appeared_start_refused' }
-    $arguments=@(('"'+$Cli+'"'),'--address','0.0.0.0','--port','4723','--allow-cors','--log-timestamp','--log-no-colors')
+    $arguments=@('--unhandled-rejections=warn','--trace-warnings',('"'+$Cli+'"'),'--address','0.0.0.0','--port','4723','--allow-cors','--log-timestamp','--log-no-colors')
     $child=Start-Process -FilePath $Node -ArgumentList $arguments -WorkingDirectory (Split-Path $Cli -Parent) `
         -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     try {
         [ordered]@{action='Start';requested_at=(Get-Date -Format o);pid=$child.Id;
             node=$Node;cli=$Cli;appium_version='3.5.2';address='0.0.0.0';port=4723;allow_cors=$true;
             hidden=$true;log_timestamp=$true;log_no_colors=$true;stdout=$stdout;stderr=$stderr;
+            requested_runtime_policy=$RuntimePolicy;
             ready_verified=$false;note='Run Appium-Status.cmd to inspect readiness. No stop/restart action is provided.'} | ConvertTo-Json -Depth 5
     } finally { $child.Dispose() }
 } finally {

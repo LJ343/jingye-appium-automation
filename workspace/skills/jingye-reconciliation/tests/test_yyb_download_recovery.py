@@ -13,18 +13,24 @@ SCRIPT_TREE = ast.parse(SCRIPT_PATH.read_text(encoding='utf-8'))
 
 
 def load_function(name: str, namespace: dict):
+    namespace.setdefault('wireless_link', SimpleNamespace(is_enabled=lambda: False, ConnectionUnavailable=type('Unavailable', (RuntimeError,), {})))
+    namespace.setdefault('AppiumSessionOwnershipError', type('OwnershipError', (RuntimeError,), {}))
     function = next(
         node
         for node in SCRIPT_TREE.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
     )
-    module = ast.Module(body=[function], type_ignores=[])
+    support = [node for node in SCRIPT_TREE.body if isinstance(node, ast.FunctionDef)
+               and node.name == 'run_device_adb' and node.name != name]
+    module = ast.Module(body=support + [function], type_ignores=[])
     ast.fix_missing_locations(module)
     exec(compile(module, str(SCRIPT_PATH), 'exec'), namespace)
     return namespace[name]
 
 
 def load_functions(names, namespace: dict):
+    namespace.setdefault('wireless_link', SimpleNamespace(is_enabled=lambda: False, ConnectionUnavailable=type('Unavailable', (RuntimeError,), {})))
+    namespace.setdefault('AppiumSessionOwnershipError', type('OwnershipError', (RuntimeError,), {}))
     wanted = set(names)
     functions = [
         node
@@ -34,7 +40,9 @@ def load_functions(names, namespace: dict):
     ]
     if {node.name for node in functions} != wanted:
         raise LookupError(f'Functions not found: {wanted}')
-    module = ast.Module(body=functions, type_ignores=[])
+    support = [node for node in SCRIPT_TREE.body if isinstance(node, ast.FunctionDef)
+               and node.name == 'run_device_adb' and node.name not in wanted]
+    module = ast.Module(body=support + functions, type_ignores=[])
     ast.fix_missing_locations(module)
     exec(compile(module, str(SCRIPT_PATH), 'exec'), namespace)
     return {name: namespace[name] for name in names}
@@ -96,6 +104,7 @@ def download_function(clock: FakeClock):
         'time': clock,
         'ensure_native_context': lambda: None,
         'raise_if_appium_session_lost': lambda _exc, _label: None,
+        'remember_honor_pdf_reclaim_context': lambda _driver: None,
     }
     return load_function('try_click_download_button', namespace)
 
@@ -1082,7 +1091,7 @@ def sales_entry_function(driver: SalesStateDriver):
         'raise_if_appium_session_lost': lambda _exc, _label: None,
         'time': SimpleNamespace(sleep=lambda _seconds: None),
         'click_step': lambda *_args, **_kwargs: None,
-        'wait_nonempty_text': lambda _locator, timeout: '冀Z00008',
+        'wait_nonempty_text': lambda _locator, timeout: '冀Z00007',
     }
     return load_function('enter_sales_page', namespace)
 
@@ -1093,7 +1102,7 @@ class SalesEntryRecoveryTest(unittest.TestCase):
 
         car = sales_entry_function(driver)(max_rounds=6)
 
-        self.assertEqual(car, '冀Z00008')
+        self.assertEqual(car, '冀Z00007')
         self.assertEqual(driver.back_calls, 1)
         self.assertEqual(driver.state, 'sales_page')
 

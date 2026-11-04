@@ -29,7 +29,7 @@ class MissingPdfRecoveryTest(unittest.TestCase):
                     connection,
                     'SALES',
                     'YS20260902111050606',
-                    '冀Z00009',
+                    '冀Z00008',
                     cargo_name='冷轧卷',
                     destination='天津港一公司',
                     load_weight_kg=32860,
@@ -63,7 +63,7 @@ class MissingPdfRecoveryTest(unittest.TestCase):
                         {
                             'direction': 'SALES',
                             'waybill_no': 'YS20260902111050606',
-                            'plate_no': '冀Z00009',
+                            'plate_no': '冀Z00008',
                             'reason': '未找到PDF',
                         }
                     ],
@@ -85,7 +85,7 @@ class MissingPdfRecoveryTest(unittest.TestCase):
                     (
                         sha256,
                         'YS20260902111050606',
-                        '冀Z00009',
+                        '冀Z00008',
                         '冷轧卷',
                         '2026-09-02T13:39:37',
                         '2026-09-02T12:00:00',

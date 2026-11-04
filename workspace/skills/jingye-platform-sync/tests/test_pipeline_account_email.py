@@ -77,7 +77,7 @@ class PipelineAccountEmailTest(unittest.TestCase):
 
         self.assertEqual(
             [item['account'] for item in results],
-            ['*******6664', '*******2319', '*******3675'],
+            ['*******0008', '*******0007', '*******0010'],
         )
         serialized = json.dumps(results, ensure_ascii=False)
         self.assertNotIn('10000000008', serialized)
@@ -93,8 +93,8 @@ class PipelineAccountEmailTest(unittest.TestCase):
         body = jingye_pipeline.build_email_body(summary)
 
         self.assertIn('本次共处理 3 个账号：2 个完成，1 个失败', body)
-        self.assertIn('完成账号：*******6664、*******2319', body)
-        self.assertIn('*******3675：在销售单阶段失败，共执行 3 次', body)
+        self.assertIn('完成账号：*******0008、*******0007', body)
+        self.assertIn('*******0010：在销售单阶段失败，共执行 3 次', body)
         self.assertNotIn('10000000008', body)
         self.assertNotIn('10000000007', body)
         self.assertNotIn('10000000010', body)
@@ -116,7 +116,7 @@ class PipelineAccountEmailTest(unittest.TestCase):
                     {
                         'direction': 'SALES',
                         'waybill_no': 'YS20260902111050606',
-                        'plate_no': '冀Z00009',
+                        'plate_no': '冀Z00008',
                         'reason': '未找到PDF',
                     }
                 ],
@@ -155,7 +155,7 @@ class PipelineAccountEmailTest(unittest.TestCase):
         )
         self.assertIn('本轮新增成功上传 7 条', body)
         self.assertIn(
-            '销售单 YS20260902111050606，车辆 冀Z00009：未找到PDF',
+            '销售单 YS20260902111050606，车辆 冀Z00008：未找到PDF',
             body,
         )
         self.assertIn('人工补录或定时任务取得并完整解析该 PDF 后', body)

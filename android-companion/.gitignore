@@ -1,0 +1,9 @@
+/build-deps/
+/build-private/
+/build/
+__pycache__/
+*.apk
+*.p12
+*.jks
+*.keystore
+*.private.*

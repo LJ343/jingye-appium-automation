@@ -7,6 +7,7 @@ import time
 import json
 import datetime
 import subprocess
+import shlex
 import unicodedata
 from pathlib import Path
 from copy import copy
@@ -16,6 +17,10 @@ from openpyxl.styles import Alignment, Border, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from appium import webdriver
 from appium.options.common.base import AppiumOptions
+from appium.webdriver.client_config import AppiumClientConfig
+import jingye_wireless as wireless_link
+import jingye_appium_guard as appium_guard
+import jingye_appium_ownership as appium_phone
 from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -175,6 +180,22 @@ ADDRESS_LLM_MAX_RETRIES = 2
 ADDRESS_LLM_TIMEOUTS = ((5, 25), (5, 35), (5, 45))
 
 
+def _pdf_local_io_path(path):
+    """Keep logical names; use Win32 extended paths only for long local I/O."""
+    value = os.fspath(path)
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return value
+    import ntpath
+    absolute = ntpath.normpath(ntpath.abspath(value))
+    # Leave ordinary short paths untouched, including existing sidecar names.
+    # 248 also protects directory operations below the traditional MAX_PATH.
+    if len(absolute) < 248:
+        return value
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
 def _pdf_runtime_dir(folder_name):
     root = os.path.join(BASE_DIR, folder_name)
     return os.path.join(root, RUN_ID) if RUN_ID else root
@@ -196,7 +217,7 @@ for _target_dir in (
     FREIGHT_CONFIRMATION_DIR,
     ADDRESS_CACHE_DIR,
 ):
-    os.makedirs(_target_dir, exist_ok=True)
+    os.makedirs(_pdf_local_io_path(_target_dir), exist_ok=True)
 
 if not os.path.isfile(EXCEL_PATH):
     raise FileNotFoundError(f"初始 Excel 不存在：{EXCEL_PATH}")
@@ -213,7 +234,7 @@ finally:
     _config_wb.close()
 
 # DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-# DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "http://192.168.0.88:8000/v1")
+# DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "http://192.0.2.1:8000/v1")
 # MODEL_NAME = os.getenv("YYB_MODEL_NAME", "qwen-max") #本地大模型
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://llm-d795ptikou79i3xy.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")
@@ -257,16 +278,16 @@ SHANGHAI_CARS = [
     "冀Z00003",
     "冀Z00004",
     "冀Z00006",
+    "冀Z00008",
     "冀Z00009",
     "冀Z00010",
     "冀Z00011",
     "冀Z00012",
     "冀Z00013",
-    "冀Z00014",
 ]
 # SHANGHAI_CARS = [
 #     # "冀Z00006",
-#     "冀Z00009",
+#     "冀Z00008",
 # ]
 
 ADB_SERIAL = os.getenv("ADB_SERIAL", "YOUR_USB_ADB_SERIAL")
@@ -321,6 +342,14 @@ class AppiumSessionLostError(RuntimeError):
     """UiAutomator2 instrumentation 已退出，当前 driver 不能继续复用。"""
 
 
+class AppiumSessionOwnershipError(RuntimeError):
+    """A possibly live session cannot be safely replaced or duplicated."""
+
+
+class SessionCleanupUncertain(AppiumSessionOwnershipError):
+    """An ended master entry does not prove the device cleanup has finished."""
+
+
 class AccountSessionSuspectedError(RuntimeError):
     """页面入口连续跳转失败，当前账号会话可能已被其他设备挤占。"""
 
@@ -342,6 +371,8 @@ MODULE_ENTRY_STALLED_MAX_ATTEMPTS = 3
 
 driver = None
 wait = None
+_session_creation_outcome_uncertain = False
+_session_cleanup_uncertain = False
 
 
 def _exception_chain_text(exc):
@@ -364,6 +395,8 @@ def is_appium_session_lost(exc):
 
 
 def raise_if_appium_session_lost(exc, operation):
+    if isinstance(exc, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+        raise exc
     if isinstance(exc, AppiumSessionLostError):
         raise exc
     if is_appium_session_lost(exc):
@@ -372,23 +405,119 @@ def raise_if_appium_session_lost(exc, operation):
         ) from exc
 
 
+def _owned_appium_session_active(session_id):
+    if not isinstance(session_id, str) or not re.fullmatch(r"[0-9a-fA-F-]{36}", session_id):
+        raise AppiumSessionOwnershipError("owned_session_id_unknown")
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        response = session.get(
+            APPIUM_SERVER_URL.rstrip("/") + "/session/" + session_id + "/timeouts",
+            timeout=(5, 30),
+        )
+        body = response.json()
+        value = body.get("value") if isinstance(body, dict) else None
+        if response.status_code == 404 and isinstance(value, dict) and value.get("error") == "invalid session id":
+            return False
+        if response.status_code == 200 and isinstance(value, dict) and not value.get("error"):
+            return True
+        raise AppiumSessionOwnershipError("owned_session_status_unconfirmed")
+    except (requests.RequestException, ValueError) as exc:
+        raise AppiumSessionOwnershipError("owned_session_status_unconfirmed") from exc
+    finally:
+        session.close()
+
+
+def _close_owned_appium_session(owned_driver):
+    global _session_cleanup_uncertain
+    session_id = getattr(owned_driver, "session_id", None)
+    reservation = getattr(owned_driver, "_jingye_guard_reservation", None)
+    wireless = wireless_link.is_enabled()
+    try:
+        if wireless:
+            if reservation is None:
+                raise AppiumSessionOwnershipError("wireless_session_guard_reservation_missing")
+            wireless_link.ensure_connected()
+        owned_driver.quit()
+        if wireless:
+            phone_owner = getattr(owned_driver, "_jingye_phone_ownership", None)
+            if phone_owner is None:
+                raise AppiumSessionOwnershipError("wireless_phone_ownership_missing")
+            phone_owner.finish_after_quit(session_id)
+            reservation.closed()
+        return
+    except Exception as exc:
+        _session_cleanup_uncertain = True
+        if wireless and reservation is not None:
+            try:
+                reservation.uncertain("cleanup_uncertain")
+            except appium_guard.GuardError as guard_error:
+                raise SessionCleanupUncertain("cleanup_uncertain_guard_write_or_query_failed") from guard_error
+        master_state = "unknown"
+        try:
+            master_state = "active" if _owned_appium_session_active(session_id) else "ended"
+        except AppiumSessionOwnershipError:
+            pass
+        print(f"STATUS:YYB_SESSION_CLEANUP_UNCERTAIN|MASTER_STATE:{master_state}", flush=True)
+        # Automatic timeout removes the master entry before UiA2 cleanup finishes.
+        # Even an exact invalid-session response cannot authorize a new Remote here.
+        raise SessionCleanupUncertain("owned_session_cleanup_unconfirmed_no_recreate") from exc
+
+
 def create_appium_session(reason, max_attempts=2):
     """创建并实测一条可用会话；不能只以 Remote 返回成功作为启动成功。"""
-    global driver, wait
+    global driver, wait, ADB_SERIAL, _session_creation_outcome_uncertain, _session_cleanup_uncertain
+    if _session_cleanup_uncertain or _session_creation_outcome_uncertain:
+        raise AppiumSessionOwnershipError("unconfirmed_previous_session_no_recreate")
     last_error = None
 
     for attempt in range(1, max_attempts + 1):
+        wireless = wireless_link.is_enabled()
+        reservation = None
+        if wireless:
+            # Connectivity waiting does not consume a Remote/account retry.
+            ADB_SERIAL = wireless_link.ensure_connected()
+            options.set_capability("appium:deviceName", ADB_SERIAL)
+            options.set_capability("appium:udid", ADB_SERIAL)
+            options.set_capability("appium:suppressKillServer", True)
+            options.set_capability("appium:newCommandTimeout", 0)
+            options.set_capability("appium:ignoreHiddenApiPolicyError", True)
+            try:
+                reservation = appium_guard.begin(APPIUM_SERVER_URL)
+            except appium_guard.GuardError as exc:
+                raise AppiumSessionOwnershipError("wireless_appium_guard_refused_creation") from exc
         candidate = None
+        remote_attempted = False
         print(
             f'  [Appium会话] {reason}，正在连接手机 '
             f'({attempt}/{max_attempts})：{APPIUM_SERVER_URL} ...',
             flush=True,
         )
         try:
-            candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options)
+            if wireless:
+                phone_owner = appium_phone.prepare(
+                    wireless_link, APPIUM_SERVER_URL, reservation.host,
+                    host_probe=appium_guard.query_local_host,
+                )
+                client = AppiumClientConfig(remote_server_addr=APPIUM_SERVER_URL, timeout=260, keep_alive=True)
+                remote_attempted = True
+                candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options, client_config=client)
+                candidate._jingye_guard_reservation = reservation
+                candidate._jingye_phone_ownership = phone_owner
+                reservation.created(candidate.session_id)
+                phone_owner.capture(candidate.session_id)
+            else:
+                candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options)
             try:
-                candidate.update_settings(APPIUM_PERFORMANCE_SETTINGS)
+                settings = dict(APPIUM_PERFORMANCE_SETTINGS)
+                if wireless:
+                    settings["shutdownOnPowerDisconnect"] = False
+                candidate.update_settings(settings)
+                if wireless and candidate.get_settings().get("shutdownOnPowerDisconnect") is not False:
+                    raise AppiumSessionOwnershipError("wireless_power_setting_unconfirmed")
             except Exception as settings_error:
+                if wireless:
+                    raise
                 print(f'  ⚠️ Appium 性能设置未应用，将使用默认设置: {settings_error}')
 
             # 真实执行一次 UiAutomator2 命令，排除“session 建立但 instrumentation 未启动”。
@@ -406,10 +535,29 @@ def create_appium_session(reason, max_attempts=2):
             last_error = exc
             print(f'  ⚠️ Appium 会话创建失败 ({attempt}/{max_attempts}): {exc}', flush=True)
             if candidate is not None:
+                if wireless:
+                    _close_owned_appium_session(candidate)
+                else:
+                    try:
+                        candidate.quit()
+                    except Exception:
+                        pass
+            elif wireless:
+                if not remote_attempted:
+                    _session_cleanup_uncertain = True
+                    try:
+                        reservation.uncertain("cleanup_uncertain")
+                    except appium_guard.GuardError as guard_error:
+                        raise AppiumSessionOwnershipError("creation_intent_no_remote_guard_write_failed") from guard_error
+                    print("STATUS:YYB_CREATION_INTENT_NO_REMOTE|PHONE_STATE:UNCONFIRMED", flush=True)
+                    raise AppiumSessionOwnershipError("creation_intent_no_remote_phone_unconfirmed") from exc
+                # Remote may have created a server session before its response was lost.
+                _session_creation_outcome_uncertain = True
                 try:
-                    candidate.quit()
-                except Exception:
-                    pass
+                    reservation.uncertain("creation_unknown")
+                except appium_guard.GuardError as guard_error:
+                    raise AppiumSessionOwnershipError("creation_unknown_guard_write_or_query_failed") from guard_error
+                raise AppiumSessionOwnershipError("remote_creation_outcome_unconfirmed_no_recreate") from exc
             if attempt < max_attempts:
                 time.sleep(1.5)
 
@@ -421,7 +569,14 @@ def create_appium_session(reason, max_attempts=2):
 def recreate_appium_session(reason):
     """释放旧会话并重建；noReset=True，不会清除 App 登录数据。"""
     global driver, wait
+    if _session_cleanup_uncertain or _session_creation_outcome_uncertain:
+        raise AppiumSessionOwnershipError("unconfirmed_previous_session_no_recreate")
     old_driver = driver
+    if old_driver is not None and wireless_link.is_enabled():
+        _close_owned_appium_session(old_driver)
+        driver = None
+        wait = None
+        return create_appium_session(reason)
     driver = None
     wait = None
 
@@ -516,6 +671,8 @@ def ensure_native_context():
         if driver.current_context != "NATIVE_APP":
             driver.switch_to.context("NATIVE_APP")
     except Exception as exc:
+        if wireless_link.is_enabled():
+            raise
         raise_if_appium_session_lost(exc, '切换原生上下文')
 
 
@@ -528,14 +685,78 @@ def fast_wait(timeout=10):
     )
 
 
+def _ui_allowed_packages(locators=()):
+    """A browser locator authorizes the browser only for that particular wait."""
+    packages = set()
+    for locator in locators:
+        value = str(locator[1])
+        for package in ("com.ibb.tizi", "com.honor.browser"):
+            if package in value:
+                packages.add(package)
+    return packages or {"com.ibb.tizi"}
+
+
+def _ui_pause_if_external(stage, allowed_packages=None, *, package_probe=None,
+                          clock=None, sleeper=None, emit=None,
+                          poll_seconds=2.0, heartbeat_seconds=60.0):
+    """Read-only pause for a confirmed external foreground; never hide errors.
+
+    No package query occurs in USB mode. A same-package unknown page is not a
+    pause, and a probe/session/connection exception is deliberately propagated.
+    Hooks are injectable for offline tests; no environment or private UI is read.
+    """
+    if not wireless_link.is_enabled():
+        return False
+    allowed = frozenset(allowed_packages or {"com.ibb.tizi"})
+    package_probe = package_probe or (lambda: driver.current_package)
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
+    def default_emit(record):
+        print("STATUS:UI_INTERRUPTION|" + json.dumps(record, separators=(',', ':')), flush=True)
+    emit = emit or default_emit
+    def read_package():
+        package = package_probe()
+        if not isinstance(package, str) or not package.strip():
+            raise WebDriverException("foreground_package_unavailable")
+        return package
+    if read_package() in allowed:
+        return False
+    began = last_heartbeat = clock()
+    emit({"event": "paused_external_ui", "stage": stage, "elapsedSeconds": 0})
+    while True:
+        sleeper(poll_seconds)
+        package = read_package()
+        observed = clock()
+        elapsed = round(max(0, observed - began), 3)
+        if package in allowed:
+            emit({"event": "resumed_allowed_ui", "stage": stage, "elapsedSeconds": elapsed})
+            return True
+        if observed - last_heartbeat >= heartbeat_seconds:
+            emit({"event": "waiting_external_ui", "stage": stage, "elapsedSeconds": elapsed})
+            last_heartbeat = observed
+
+
+def _ui_readonly_wait(condition, timeout, locators=()):
+    while True:
+        try:
+            return fast_wait(timeout).until(condition)
+        except TimeoutException as error:
+            if not wireless_link.is_enabled() or is_appium_session_lost(error):
+                raise
+            if not _ui_pause_if_external("element_wait", _ui_allowed_packages(locators)):
+                raise
+            # Only the original read-only condition is repeated. No click is sent.
+            ensure_native_context()
+
+
 def wait_visible(locator, timeout=10):
     ensure_native_context()
-    return fast_wait(timeout).until(EC.visibility_of_element_located(locator))
+    return _ui_readonly_wait(EC.visibility_of_element_located(locator), timeout, (locator,))
 
 
 def wait_clickable(locator, timeout=10):
     ensure_native_context()
-    return fast_wait(timeout).until(EC.element_to_be_clickable(locator))
+    return _ui_readonly_wait(EC.element_to_be_clickable(locator), timeout, (locator,))
 
 
 def wait_nonempty_text(locator, timeout=10):
@@ -549,11 +770,12 @@ def wait_nonempty_text(locator, timeout=10):
             return False
 
     ensure_native_context()
-    return fast_wait(timeout).until(condition)
+    return _ui_readonly_wait(condition, timeout, (locator,))
 
 
 def wait_for_any_visible(locators, timeout=10):
     """等待任意一个页面标志元素可见。"""
+    locators = tuple(locators)
     def condition(d):
         for locator in locators:
             try:
@@ -561,16 +783,50 @@ def wait_for_any_visible(locators, timeout=10):
                     if el.is_displayed():
                         return locator
             except Exception as exc:
+                if wireless_link.is_enabled():
+                    if not isinstance(exc, (NoSuchElementException, StaleElementReferenceException)):
+                        raise
                 raise_if_appium_session_lost(exc, '等待页面元素')
                 continue
         return False
 
     ensure_native_context()
-    return fast_wait(timeout).until(condition)
+    return _ui_readonly_wait(condition, timeout, locators)
+
+
+def _ui_wireless_click_step(locator, desc, next_locator, timeout, retries):
+    """Retry locating only; after click is attempted never replay that action."""
+    for attempt in range(1, retries + 1):
+        try:
+            element = wait_clickable(locator, timeout=timeout)
+            break
+        except (NoSuchElementException, StaleElementReferenceException, TimeoutException) as error:
+            if is_appium_session_lost(error):
+                raise
+            if attempt >= retries:
+                raise
+            time.sleep(0.35)
+    try:
+        element.click()
+    except TRANSIENT_UI_ERRORS as error:
+        if is_appium_session_lost(error):
+            raise
+        allowed = _ui_allowed_packages((locator,) + ((next_locator,) if next_locator else ()))
+        if not _ui_pause_if_external("click_outcome", allowed) or next_locator is None:
+            raise
+        # The click might have reached the phone. Only inspect its target now.
+        wait_visible(next_locator, timeout=timeout)
+        return True
+    if next_locator:
+        wait_visible(next_locator, timeout=timeout)
+    print(f"  ✅ 已点击：{desc}")
+    return True
 
 
 def click_step(locator, desc, next_locator=None, timeout=10, retries=2):
     """重新定位后点击；瞬时失败时仅重试当前点击，不重跑整个账号。"""
+    if wireless_link.is_enabled():
+        return _ui_wireless_click_step(locator, desc, next_locator, timeout, retries)
     last_error = None
     last_phase = '定位并点击'
     for attempt in range(1, retries + 1):
@@ -1788,10 +2044,16 @@ def correct_freight_clipped_visibility(snapshots):
 
 
 def get_visible_freight_snapshots(sheet_name, source_kind, source_value, car_no, timeout=5):
-    try:
-        rv = wait_visible((AppiumBy.ID, FREIGHT_LIST_ID), timeout=timeout)
-    except TimeoutException:
-        return None, []
+    while True:
+        try:
+            rv = wait_visible((AppiumBy.ID, FREIGHT_LIST_ID), timeout=timeout)
+            break
+        except TimeoutException as error:
+            if wireless_link.is_enabled() and is_appium_session_lost(error):
+                raise
+            if wireless_link.is_enabled() and _ui_pause_if_external("freight_list_empty"):
+                continue
+            return None, []
     rv_rect = dict(rv.rect)
     try:
         cards = driver.find_elements(
@@ -2683,6 +2945,8 @@ def run_freight_scope_with_recovery(phone, sheet_name, source_kind, source_value
                 sheet_name, source_kind, source_value, car_no
             )
         except Exception as exc:
+            if isinstance(exc, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                raise
             last_error = exc
             session_lost = is_appium_session_lost(exc)
             relogin_required = is_account_relogin_error(exc)
@@ -2755,22 +3019,31 @@ def tap_clickable_span_shotgun(driver, element):
             raise_if_appium_session_lost(exc, '检测浏览器前台状态')
 
 
+def run_device_adb(arguments, *, timeout=30, check=True, retry_safe=False):
+    if wireless_link.is_enabled():
+        return wireless_link.run_adb(
+            ["-s", ADB_SERIAL, *arguments], timeout=timeout, check=check,
+            capture_output=True, text=True, retry_safe=retry_safe,
+        )
+    return subprocess.run(
+        ["adb", "-s", ADB_SERIAL, *arguments], timeout=timeout, check=check,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+
+
 def adb_shell(cmd):
-    full_cmd = f'adb -s {ADB_SERIAL} shell "{cmd}"'
-    return subprocess.check_output(
-        full_cmd,
-        shell=True,
-        stderr=subprocess.STDOUT
-    ).decode("utf-8", errors="ignore").strip()
+    return run_device_adb(["shell", cmd], timeout=30).stdout.strip()
 
 
 def get_latest_phone_pdf():
     """返回手机 HonorBrowser 下载目录最新 PDF 路径。"""
     try:
-        latest_file = adb_shell(f'ls -t {PHONE_PDF_GLOB} 2>/dev/null | head -n 1')
+        latest_file = run_device_adb(["shell", "ls", "-t", PHONE_PDF_GLOB], timeout=30, retry_safe=True).stdout.strip()
         if latest_file and "No such file" not in latest_file:
             return latest_file.splitlines()[0].strip()
-    except Exception:
+    except Exception as exc:
+        if wireless_link.is_enabled() and isinstance(exc, wireless_link.ConnectionUnavailable):
+            raise
         pass
     return ""
 
@@ -2782,20 +3055,24 @@ def get_phone_file_size(phone_file_path):
 
     try:
         # Android 15 的 toybox stat 支持 -c %s。
-        result = adb_shell(f"stat -c %s '{phone_file_path}' 2>/dev/null")
+        result = run_device_adb(["shell", "stat", "-c", "%s", "--", shlex.quote(phone_file_path)], timeout=30, retry_safe=True).stdout
         match = re.search(r"\d+", result)
         if match:
             return int(match.group(0))
-    except Exception:
+    except Exception as exc:
+        if wireless_link.is_enabled() and isinstance(exc, wireless_link.ConnectionUnavailable):
+            raise
         pass
 
     try:
         # 个别系统 stat 不兼容时使用 wc 兜底。
-        result = adb_shell(f"wc -c < '{phone_file_path}' 2>/dev/null")
+        result = run_device_adb(["shell", "wc", "-c", "--", shlex.quote(phone_file_path)], timeout=30, retry_safe=True).stdout
         match = re.search(r"\d+", result)
         if match:
             return int(match.group(0))
-    except Exception:
+    except Exception as exc:
+        if wireless_link.is_enabled() and isinstance(exc, wireless_link.ConnectionUnavailable):
+            raise
         pass
 
     return -1
@@ -2877,7 +3154,13 @@ def wait_for_browser_or_pdf(before_pdf, timeout=12):
     deadline = time.time() + timeout
     next_pdf_check = 0.0
 
-    while time.time() < deadline:
+    while True:
+        if time.time() >= deadline:
+            if wireless_link.is_enabled() and _ui_pause_if_external(
+                    "pdf_browser_transition", {"com.ibb.tizi", "com.honor.browser"}):
+                deadline = time.time() + timeout
+            else:
+                return "timeout", ""
         now = time.time()
         if now >= next_pdf_check:
             latest_pdf = get_latest_phone_pdf()
@@ -2890,6 +3173,8 @@ def wait_for_browser_or_pdf(before_pdf, timeout=12):
             if driver.current_package == "com.honor.browser":
                 return "browser", ""
         except Exception as exc:
+            if wireless_link.is_enabled():
+                raise
             raise_if_appium_session_lost(exc, '等待浏览器打开')
 
         time.sleep(0.25)
@@ -2899,15 +3184,7 @@ def wait_for_browser_or_pdf(before_pdf, timeout=12):
 
 def _run_adb_for_honor_reclaim(arguments, timeout=8.0):
     '''运行一条严格参数化的 ADB 命令；仅供 Honor 当前标签精确回收。'''
-    result = subprocess.run(
-        ['adb', '-s', ADB_SERIAL, *arguments],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        timeout=timeout,
-        check=False,
-    )
+    result = run_device_adb(arguments, timeout=timeout, check=False)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or '').strip()
         raise RuntimeError(
@@ -3148,27 +3425,8 @@ def close_honor_current_webview_target(
             cleanup_problem = ''
             for attempt in range(2):
                 try:
-                    removal = subprocess.run(
-                        [
-                            'adb', '-s', ADB_SERIAL,
-                            'forward', '--remove', local_spec,
-                        ],
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace',
-                        timeout=timeout,
-                        check=False,
-                    )
-                    listing = subprocess.run(
-                        ['adb', '-s', ADB_SERIAL, 'forward', '--list'],
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace',
-                        timeout=timeout,
-                        check=False,
-                    )
+                    removal = run_device_adb(['forward', '--remove', local_spec], timeout=timeout, check=False)
+                    listing = run_device_adb(['forward', '--list'], timeout=timeout, check=False)
                     mapping_still_exists = any(
                         len(parts) >= 2
                         and parts[0] == ADB_SERIAL
@@ -3499,6 +3757,184 @@ def close_current_honor_pdf_page(driver, timeout=3.0, max_back_steps=3):
         return False
 
 
+class PdfTransferValidationError(RuntimeError):
+    """A downloaded file has not met the transport integrity contract."""
+
+
+class PdfDownloadIncompleteError(AccountSessionSuspectedError):
+    """An expected attachment is missing; the account cannot be complete."""
+
+
+def _pdf_identity(wb_no, car_no, file_index=""):
+    identity = [str(clean_val(wb_no)), str(clean_val(car_no)), str(file_index)]
+    return hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _pdf_local_facts(path):
+    path = _pdf_local_io_path(path)
+    size = os.path.getsize(path)
+    if size < 1024:
+        raise PdfTransferValidationError("pdf_too_small")
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        if stream.read(5) != b"%PDF-":
+            raise PdfTransferValidationError("pdf_header_invalid")
+        stream.seek(max(0, size - 1024))
+        if b"%%EOF" not in stream.read():
+            raise PdfTransferValidationError("pdf_end_marker_missing")
+        stream.seek(0)
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return size, digest.hexdigest()
+
+
+def _phone_pdf_sha256(phone_pdf_path, timeout=30):
+    result = run_device_adb(["shell", "sha256sum", "--", shlex.quote(phone_pdf_path)], timeout=timeout, retry_safe=True)
+    match = re.match(r"^([0-9a-fA-F]{64})\s", result.stdout or "")
+    if not match:
+        raise PdfTransferValidationError("remote_sha256_unavailable")
+    return match.group(1).lower()
+
+
+def _pdf_integrity_metadata(path, wb_no=None, car_no=None, file_index="", *, expected_identity=None):
+    """Return proven metadata, never upgrade an unverified legacy file by guessing."""
+    try:
+        with open(_pdf_local_io_path(str(path) + ".integrity.json"), "r", encoding="utf-8") as stream:
+            metadata = json.load(stream)
+        size, digest = _pdf_local_facts(path)
+        if (
+            metadata.get("schema") != 1
+            or metadata.get("verification") != "adb-sha256-v1"
+            or metadata.get("identitySHA256") != (expected_identity or _pdf_identity(wb_no, car_no, file_index))
+            or metadata.get("bytes") != size
+            or metadata.get("sha256") != digest
+            or metadata.get("remoteSHA256Before") != digest
+            or metadata.get("remoteSHA256After") != digest
+            or metadata.get("remoteBytesBefore") != size
+            or metadata.get("remoteBytesAfter") != size
+        ):
+            return None
+        return metadata
+    except (OSError, ValueError, TypeError, AttributeError, PdfTransferValidationError):
+        return None
+
+
+def require_pdf_downloads_complete(expected_count, downloaded_count):
+    if expected_count < 1 or downloaded_count != expected_count:
+        raise PdfDownloadIncompleteError(
+            f"expected_pdf_incomplete: expected={expected_count}, verified={downloaded_count}"
+        )
+
+
+def _read_pdf_manifest(save_dir):
+    path = os.path.join(save_dir, ".pdf-download-manifest.json")
+    if not os.path.exists(_pdf_local_io_path(path)):
+        return {"schema": 1, "batches": {}}
+    try:
+        with open(_pdf_local_io_path(path), "r", encoding="utf-8") as stream:
+            value = json.load(stream)
+        if value.get("schema") != 1 or not isinstance(value.get("batches"), dict):
+            raise ValueError("manifest_schema")
+        return value
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        raise PdfDownloadIncompleteError("pdf_manifest_unreadable") from exc
+
+
+def _write_pdf_manifest(save_dir, manifest):
+    path = os.path.join(save_dir, ".pdf-download-manifest.json")
+    temporary = path + ".part"
+    with open(_pdf_local_io_path(temporary), "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, sort_keys=True)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(_pdf_local_io_path(temporary), _pdf_local_io_path(path))
+
+
+def register_pdf_enumeration_pending(save_dir, wb_no, car_no):
+    """Remember an observed order before opening its attachment detail page."""
+    manifest = _read_pdf_manifest(save_dir)
+    key = _pdf_identity(wb_no, car_no, "batch")
+    previous = manifest["batches"].get(key, {})
+    manifest["batches"][key] = {
+        "expectedSlots": previous.get("expectedSlots", []),
+        "enumerationComplete": False, "state": "PENDING", "verifiedSlots": {},
+    }
+    _write_pdf_manifest(save_dir, manifest)
+
+
+def register_expected_pdf_slots(save_dir, wb_no, car_no, expected_count, *, indexed):
+    """Remember every observed expected slot; a later retry cannot silently shrink it."""
+    if not isinstance(expected_count, int) or expected_count < 0:
+        raise PdfDownloadIncompleteError("pdf_expected_count_unknown")
+    manifest = _read_pdf_manifest(save_dir)
+    key = _pdf_identity(wb_no, car_no, "batch")
+    batch = manifest["batches"].get(key)
+    expected = [str(i + 1) for i in range(expected_count)] if indexed else ([""] if expected_count else [])
+    if batch is not None:
+        if not isinstance(batch.get("expectedSlots"), list):
+            raise PdfDownloadIncompleteError("pdf_manifest_slots_invalid")
+        previous = set(batch["expectedSlots"])
+        if not previous.issubset(set(expected)):
+            raise PdfDownloadIncompleteError("pdf_expected_slots_disappeared_on_retry")
+    if not expected and batch is None:
+        return
+    manifest["batches"][key] = {
+        "expectedSlots": expected, "enumerationComplete": True,
+        "state": "PENDING" if expected else "COMPLETE", "verifiedSlots": {},
+    }
+    _write_pdf_manifest(save_dir, manifest)
+
+
+def complete_expected_pdf_slots(save_dir, wb_no, car_no):
+    manifest = _read_pdf_manifest(save_dir)
+    key = _pdf_identity(wb_no, car_no, "batch")
+    batch = manifest["batches"].get(key)
+    if not batch or not batch.get("expectedSlots"):
+        raise PdfDownloadIncompleteError("pdf_expected_slots_not_registered")
+    verified = {}
+    for slot in batch["expectedSlots"]:
+        path = find_existing_archived_pdf(save_dir, wb_no, car_no, slot)
+        if not path:
+            raise PdfDownloadIncompleteError("pdf_expected_slot_not_verified")
+        metadata = _pdf_integrity_metadata(path, wb_no, car_no, slot)
+        if metadata is None:
+            raise PdfDownloadIncompleteError("pdf_expected_slot_not_verified")
+        verified[slot] = {"filename": os.path.basename(path), "identitySHA256": metadata["identitySHA256"],
+                          "sha256": metadata["sha256"], "bytes": metadata["bytes"]}
+    batch.update(state="COMPLETE", verifiedSlots=verified)
+    _write_pdf_manifest(save_dir, manifest)
+
+
+def assert_all_pdf_batches_complete(save_dirs):
+    """Final crawl gate: partial earlier accounts must not be hidden by later retries."""
+    for save_dir in save_dirs:
+        for batch in _read_pdf_manifest(save_dir)["batches"].values():
+            slots = batch.get("expectedSlots", [])
+            verified = batch.get("verifiedSlots", {})
+            if (not isinstance(slots, list) or batch.get("state") != "COMPLETE"
+                    or set(verified) != set(slots)
+                    or (not slots and batch.get("enumerationComplete") is not True)):
+                raise PdfDownloadIncompleteError("pdf_manifest_batch_incomplete")
+            for slot in slots:
+                proof = verified[slot]
+                filename = proof.get("filename", "")
+                if not filename or os.path.basename(filename) != filename:
+                    raise PdfDownloadIncompleteError("pdf_manifest_path_invalid")
+                metadata = _pdf_integrity_metadata(
+                    os.path.join(save_dir, filename), expected_identity=proof.get("identitySHA256", ""))
+                if not metadata or metadata["sha256"] != proof.get("sha256") or metadata["bytes"] != proof.get("bytes"):
+                    raise PdfDownloadIncompleteError("pdf_manifest_proof_changed")
+
+
+def require_single_pdf_download(*args, **kwargs):
+    wb_no, car_no, save_dir = args[2], args[3], args[5]
+    register_expected_pdf_slots(save_dir, wb_no, car_no, 1, indexed=False)
+    result = execute_single_download(*args, **kwargs)
+    require_pdf_downloads_complete(1, int(result is True))
+    complete_expected_pdf_slots(save_dir, wb_no, car_no)
+    return True
+
+
 def pull_phone_pdf(
     phone_pdf_path,
     wb_no,
@@ -3509,17 +3945,7 @@ def pull_phone_pdf(
     source_value="",
     sheet_name="",
 ):
-    """
-    拉取指定手机 PDF 到本地目录，并做完整性校验。
-
-    只有满足以下条件才返回 True：
-    1. 手机端文件已停止增长且不小于 1KB；
-    2. adb pull 成功；
-    3. 本地文件大小与手机端一致；
-    4. 文件头为 %PDF-。
-
-    拉取过程先写入 .part 临时文件，校验成功后再改名，避免目录里留下 0KB PDF。
-    """
+    """Verify remote-before/local/remote-after sizes and SHA256 before publishing a PDF."""
     if not phone_pdf_path:
         return False
 
@@ -3531,58 +3957,59 @@ def pull_phone_pdf(
         print("  ❌ 手机端 PDF 尚未写完或文件为 0KB，本次不拉取。")
         return False
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.datetime.now()
     clean_car, clean_wb = clean_val(car_no), clean_val(wb_no)
     idx_str = f"_{file_index}" if file_index else ""
-    new_name = f"{clean_wb}_{clean_car}_{timestamp}{idx_str}.pdf"
-    local_target_path = os.path.join(save_dir, new_name)
+    while True:
+        timestamp = stamp.strftime("%Y%m%d_%H%M%S")
+        new_name = f"{clean_wb}_{clean_car}_{timestamp}{idx_str}.pdf"
+        local_target_path = os.path.join(save_dir, new_name)
+        if not os.path.exists(_pdf_local_io_path(local_target_path)) and not os.path.exists(_pdf_local_io_path(local_target_path + ".integrity.json")):
+            break
+        stamp += datetime.timedelta(seconds=1)
     temp_target_path = local_target_path + ".part"
+    metadata_path = local_target_path + ".integrity.json"
+    metadata_part = metadata_path + ".part"
+    published = False
 
     try:
-        if os.path.exists(temp_target_path):
-            os.remove(temp_target_path)
+        if os.path.exists(_pdf_local_io_path(temp_target_path)):
+            os.remove(_pdf_local_io_path(temp_target_path))
 
-        cmd_pull = [
-            "adb", "-s", ADB_SERIAL,
-            "pull", phone_pdf_path, temp_target_path
-        ]
-        result = subprocess.run(
-            cmd_pull,
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        remote_hash_before = _phone_pdf_sha256(phone_pdf_path)
+        result = run_device_adb(["pull", phone_pdf_path, _pdf_local_io_path(temp_target_path)], timeout=150, retry_safe=True)
 
         if result.stdout.strip():
             print(result.stdout.strip())
 
-        if not os.path.exists(temp_target_path):
+        if not os.path.exists(_pdf_local_io_path(temp_target_path)):
             raise RuntimeError("adb pull 返回成功，但本地临时文件不存在")
 
-        local_size = os.path.getsize(temp_target_path)
+        local_size, local_hash = _pdf_local_facts(temp_target_path)
         remote_size_after = get_phone_file_size(phone_pdf_path)
-
-        if local_size < 1024:
-            raise RuntimeError(f"本地文件过小：{local_size} bytes")
-
-        if remote_size_after <= 0:
-            raise RuntimeError("拉取后无法读取手机端文件大小")
-
-        if local_size != remote_size_after:
-            raise RuntimeError(
-                f"文件大小不一致：手机端 {remote_size_after} bytes，"
-                f"电脑端 {local_size} bytes"
-            )
-
-        with open(temp_target_path, "rb") as pdf_file:
-            header = pdf_file.read(5)
-
-        if header != b"%PDF-":
-            raise RuntimeError(
-                f"文件头不是有效 PDF：{header!r}"
-            )
-
-        os.replace(temp_target_path, local_target_path)
+        remote_hash_after = _phone_pdf_sha256(phone_pdf_path)
+        if local_size != remote_size_before or local_size != remote_size_after:
+            raise PdfTransferValidationError("remote_local_size_mismatch")
+        if local_hash != remote_hash_before or local_hash != remote_hash_after:
+            raise PdfTransferValidationError("remote_local_sha256_mismatch")
+        metadata = {
+            "schema": 1,
+            "verification": "adb-sha256-v1",
+            "identitySHA256": _pdf_identity(wb_no, car_no, file_index),
+            "bytes": local_size,
+            "sha256": local_hash,
+            "remoteBytesBefore": remote_size_before,
+            "remoteBytesAfter": remote_size_after,
+            "remoteSHA256Before": remote_hash_before,
+            "remoteSHA256After": remote_hash_after,
+        }
+        with open(_pdf_local_io_path(metadata_part), "w", encoding="utf-8") as stream:
+            json.dump(metadata, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(_pdf_local_io_path(temp_target_path), _pdf_local_io_path(local_target_path))
+        published = True
+        os.replace(_pdf_local_io_path(metadata_part), _pdf_local_io_path(metadata_path))
         append_source_context(
             "pdf",
             sheet_name,
@@ -3599,21 +4026,23 @@ def pull_phone_pdf(
         return True
 
     except Exception as e:
-        print(f"  ❌ ADB Pull/PDF 校验失败: {e}")
-
-        try:
-            if os.path.exists(temp_target_path):
-                os.remove(temp_target_path)
-        except Exception:
-            pass
-
-        # 理论上校验失败前不会生成正式 PDF；这里再做一次防御清理。
-        try:
-            if os.path.exists(local_target_path) and os.path.getsize(local_target_path) == 0:
-                os.remove(local_target_path)
-        except Exception:
-            pass
-
+        reason = str(e) if isinstance(e, PdfTransferValidationError) else type(e).__name__
+        diagnostics = {"errorType": type(e).__name__, "pathChars": len(local_target_path),
+                       "metadataChars": len(metadata_path), "metadataPartChars": len(metadata_part)}
+        for field in ("errno", "winerror"):
+            value = getattr(e, field, None)
+            if type(value) is int:
+                diagnostics[field] = value
+        print(f"  ❌ ADB Pull/PDF 校验失败: {reason}|" + json.dumps(diagnostics, separators=(",", ":")))
+        # Only this invocation's fresh paths are removed; existing archives are never overwritten.
+        for path in (temp_target_path, metadata_part, metadata_path if published else "", local_target_path if published else ""):
+            try:
+                if path and os.path.exists(_pdf_local_io_path(path)):
+                    os.remove(_pdf_local_io_path(path))
+            except OSError:
+                pass
+        if wireless_link.is_enabled() and isinstance(e, wireless_link.ConnectionUnavailable):
+            raise
         return False
 
 
@@ -3791,7 +4220,7 @@ def find_existing_archived_pdf(save_dir, wb_no, car_no, file_index=""):
     candidates = []
 
     try:
-        names = os.listdir(save_dir)
+        names = os.listdir(_pdf_local_io_path(save_dir))
     except OSError:
         return ''
 
@@ -3805,18 +4234,16 @@ def find_existing_archived_pdf(save_dir, wb_no, car_no, file_index=""):
 
         path = os.path.join(save_dir, name)
         try:
-            if os.path.getsize(path) < 1024:
+            if _pdf_integrity_metadata(path, wb_no, car_no, file_index) is None:
+                print('    [PDF完整性] 旧归档摘要不可证完整，保留原件并重新获取。')
                 continue
-            with open(path, 'rb') as pdf_file:
-                if pdf_file.read(5) != b'%PDF-':
-                    continue
             candidates.append(path)
         except OSError:
             continue
 
     if not candidates:
         return ''
-    return max(candidates, key=os.path.getmtime)
+    return max(candidates, key=lambda path: os.path.getmtime(_pdf_local_io_path(path)))
 
 
 def execute_single_download(
@@ -3878,6 +4305,7 @@ def execute_single_download(
 
         before_pdf = get_latest_phone_pdf()
 
+        control_failure = False
         try:
             try:
                 driver.switch_to.context("NATIVE_APP")
@@ -3942,6 +4370,9 @@ def execute_single_download(
             raise Exception("检测到新 PDF，但拉取到本地失败")
 
         except Exception as e:
+            if isinstance(e, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                control_failure = True
+                raise
             if is_appium_session_lost(e):
                 print('    ❌ [下载器] UiAutomator2 会话已失效，停止普通下载重试。')
                 if isinstance(e, AppiumSessionLostError):
@@ -3957,37 +4388,38 @@ def execute_single_download(
                 return False
 
         finally:
-            print("    [强制回城] 清理浏览器后台进程，保证不卡顿...")
-            try:
-                driver.switch_to.context("NATIVE_APP")
-            except Exception as exc:
-                raise_if_appium_session_lost(exc, '下载清理时切换原生上下文')
+            if not control_failure:
+                print("    [强制回城] 清理浏览器后台进程，保证不卡顿...")
+                try:
+                    driver.switch_to.context("NATIVE_APP")
+                except Exception as exc:
+                    raise_if_appium_session_lost(exc, '下载清理时切换原生上下文')
 
-            browser_tab_closed = close_current_honor_pdf_page(driver)
-            if not browser_tab_closed:
-                print(
-                    '    ⚠️ [浏览器回收] 未确认本次 PDF 标签已安全关闭；'
-                    '不会盲目操作其他标签，继续 force-stop 浏览器。'
-                )
+                browser_tab_closed = close_current_honor_pdf_page(driver)
+                if not browser_tab_closed:
+                    print(
+                        '    ⚠️ [浏览器回收] 未确认本次 PDF 标签已安全关闭；'
+                        '不会盲目操作其他标签，继续 force-stop 浏览器。'
+                    )
 
-            try:
-                driver.terminate_app("com.honor.browser")
-            except Exception as exc:
-                raise_if_appium_session_lost(exc, '下载清理时关闭浏览器')
+                try:
+                    driver.terminate_app("com.honor.browser")
+                except Exception as exc:
+                    raise_if_appium_session_lost(exc, '下载清理时关闭浏览器')
 
-            print("    [强制回城] 正在切回货运 App...")
-            try:
-                activate_tizi_and_wait(
-                    [
-                        (AppiumBy.ID, "com.ibb.tizi:id/tv_pounds_pic"),
-                        (AppiumBy.ID, "com.ibb.tizi:id/iv_left"),
-                        (AppiumBy.ID, "com.ibb.tizi:id/rv"),
-                    ],
-                    timeout=12
-                )
-            except Exception as e:
-                raise_if_appium_session_lost(e, '下载后切回货运 App')
-                print(f"    ⚠️ 切回货运 App 后页面未及时就绪: {e}")
+                print("    [强制回城] 正在切回货运 App...")
+                try:
+                    activate_tizi_and_wait(
+                        [
+                            (AppiumBy.ID, "com.ibb.tizi:id/tv_pounds_pic"),
+                            (AppiumBy.ID, "com.ibb.tizi:id/iv_left"),
+                            (AppiumBy.ID, "com.ibb.tizi:id/rv"),
+                        ],
+                        timeout=12
+                    )
+                except Exception as e:
+                    raise_if_appium_session_lost(e, '下载后切回货运 App')
+                    print(f"    ⚠️ 切回货运 App 后页面未及时就绪: {e}")
 
     return False
 
@@ -4425,7 +4857,12 @@ def query_current_vehicle(desc, timeout=12):
     # 有数据时 rv 会很快出现；无数据时允许继续，由后面的遍历结束逻辑判空。
     try:
         wait_visible((AppiumBy.ID, "com.ibb.tizi:id/rv"), timeout=5)
-    except Exception:
+    except Exception as error:
+        if wireless_link.is_enabled():
+            if not isinstance(error, TimeoutException) or is_appium_session_lost(error):
+                raise
+            if _ui_pause_if_external("query_result_empty"):
+                wait_visible((AppiumBy.ID, "com.ibb.tizi:id/rv"), timeout=5)
         print("  ℹ️ 当前车辆查询后未发现列表容器，按空结果继续检查。")
 
     # 切车后列表数据可能异步刷新；保留短稳定窗口，避免读取上一辆车的旧卡片。
@@ -4525,6 +4962,7 @@ def process_purchase_current_vehicle(sheet_name, pdf_dir, selected_car):
             }
 
             print(f"\n✅ [{selected_car}] 提取采购单 [{wb_no}] -> 写入 {sheet_name}")
+            register_expected_pdf_slots(pdf_dir, wb_no, info["\u8f66\u724c\u53f7"], 1, indexed=False)
             write_data_to_excel(
                 info,
                 sheet_name,
@@ -4541,7 +4979,7 @@ def process_purchase_current_vehicle(sheet_name, pdf_dir, selected_car):
                 (AppiumBy.ID, "com.ibb.tizi:id/tv_pounds_pic"),
                 timeout=12
             )
-            execute_single_download(
+            require_single_pdf_download(
                 driver,
                 wait,
                 wb_no,
@@ -4910,6 +5348,7 @@ def process_sales_current_vehicle(sheet_name, pdf_dir, selected_car):
                 els = card.find_elements(AppiumBy.ID, id_str)
                 return "\n".join([el.text for el in els]) if els else "无"
 
+            register_pdf_enumeration_pending(pdf_dir, order_no, selected_car)
             raw_address = get_card_text("com.ibb.tizi:id/item_way_history_company_name")
             goods_name = get_card_text("com.ibb.tizi:id/item_way_history_goods")
             load_net_weight = get_card_text("com.ibb.tizi:id/item_way_history_load_net_weight")
@@ -4923,8 +5362,12 @@ def process_sales_current_vehicle(sheet_name, pdf_dir, selected_car):
                 total_pics = len(pic_links)
                 print(f"  ✅ [{selected_car}] 该单发现 {total_pics} 个磅单附件！")
             except Exception as e:
+                if isinstance(e, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                    raise
                 print(f"  ⚠️ [{selected_car}] 详情页磅单附件统计异常: {e}")
-                total_pics = 0
+                raise PdfDownloadIncompleteError("pdf_attachment_enumeration_failed") from e
+
+            register_expected_pdf_slots(pdf_dir, order_no, selected_car, total_pics, indexed=True)
 
             # 时间无效且没有附件时，仍保持原先“不写入”的处理。
             # 但只要发现附件，就必须继续下载并写入 Excel。
@@ -5012,10 +5455,8 @@ def process_sales_current_vehicle(sheet_name, pdf_dir, selected_car):
                     if ok:
                         download_success_count += 1
 
-            if download_success_count < total_pics:
-                info["备注2"] = (
-                    f"磅单附件共{total_pics}个，成功下载{download_success_count}个，存在下载失败"
-                )
+            require_pdf_downloads_complete(total_pics, download_success_count)
+            complete_expected_pdf_slots(pdf_dir, order_no, selected_car)
 
             print(f"\n✅ [{selected_car}] 销售单 [{order_no}] -> 写入 {sheet_name}")
             target_row = write_data_to_excel(
@@ -5114,6 +5555,8 @@ def run_shanghai_sales_stage_with_recovery(phone):
                 break
 
             except Exception as exc:
+                if isinstance(exc, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                    raise
                 last_error = exc
                 relogin_required = is_account_relogin_error(exc)
                 print(
@@ -5139,6 +5582,8 @@ def run_shanghai_sales_stage_with_recovery(phone):
                         ensure_native_context()
                         print('  [上海销售断点] 已重新激活货运 App，下次从当前车辆恢复。')
                     except Exception as activate_error:
+                        if isinstance(activate_error, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                            raise
                         print(
                             f'  ⚠️ [上海销售断点] 重新激活 App 失败，将改为重建会话：'
                             f'{activate_error}'
@@ -5226,6 +5671,13 @@ def run_full_flow_for_account(phone):
             break
         time.sleep(0.5)
     purchase_result_empty = not initial_purchase_cards
+    if wireless_link.is_enabled() and purchase_result_empty:
+        while _ui_pause_if_external("purchase_result_empty"):
+            initial_purchase_cards = driver.find_elements(
+                AppiumBy.XPATH, '//*[@resource-id="com.ibb.tizi:id/rv"]/*')
+            purchase_result_empty = not initial_purchase_cards
+            if initial_purchase_cards:
+                break
     if purchase_result_empty:
         print("  ℹ️ 当前账号在指定时间段内没有采购运单，跳过采购遍历，继续执行销售单流程。")
 
@@ -5284,6 +5736,7 @@ def run_full_flow_for_account(phone):
             }
 
             print(f"\n✅ 提取新单据 [{wb_no}] -> 写入 Excel")
+            register_expected_pdf_slots(PDF_PURCHASE_DIR, wb_no, info["\u8f66\u724c\u53f7"], 1, indexed=False)
             write_data_to_excel(
                 info,
                 "采购单-河北众沃",
@@ -5299,7 +5752,7 @@ def run_full_flow_for_account(phone):
                 (AppiumBy.ID, "com.ibb.tizi:id/tv_pounds_pic"),
                 timeout=12
             )
-            execute_single_download(
+            require_single_pdf_download(
                 driver,
                 wait,
                 wb_no,
@@ -5323,6 +5776,9 @@ def run_full_flow_for_account(phone):
             print("\n  [加速滚动] 大跨步上移...")
             swipe_with_brake(driver, 1800, 650)
         else:
+            if wireless_link.is_enabled() and _ui_pause_if_external("purchase_page_end"):
+                last_page_source = ""
+                continue
             replayed_waybills = detect_purchase_pagination_replay(
                 visible_processed_waybills,
                 processed_waybill_order,
@@ -5335,10 +5791,14 @@ def run_full_flow_for_account(phone):
                 )
                 break
 
-            if driver.page_source == last_page_source:
+            current_page_source = driver.page_source
+            if wireless_link.is_enabled() and _ui_pause_if_external("purchase_page_end"):
+                last_page_source = ""
+                continue
+            if current_page_source == last_page_source:
                 print("\n✅采购单处理完毕！")
                 break
-            last_page_source = driver.page_source
+            last_page_source = current_page_source if wireless_link.is_enabled() else driver.page_source
             print("\n  [微调滚动] 卡片半遮挡，进行小碎步对齐...")
             swipe_with_brake(driver, 1800, 1350)
 
@@ -5439,6 +5899,7 @@ def run_full_flow_for_account(phone):
                 return "\n".join([el.text for el in els]) if els else "无"
 
             # 先采集基础字段，但暂时不写 Excel
+            register_pdf_enumeration_pending(PDF_SALES_DIR, order_no, global_car_no)
             raw_address = get_card_text("com.ibb.tizi:id/item_way_history_company_name")
             goods_name = get_card_text("com.ibb.tizi:id/item_way_history_goods")
             load_net_weight = get_card_text("com.ibb.tizi:id/item_way_history_load_net_weight")
@@ -5455,9 +5916,12 @@ def run_full_flow_for_account(phone):
                 total_pics = len(pic_links)
                 print(f"  ✅ 该单发现 {total_pics} 个磅单附件！")
             except Exception as e:
+                if isinstance(e, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                    raise
                 print(f"  ⚠️ 详情页磅单附件统计异常: {e}")
-                total_pics = 0
-                pic_links = []
+                raise PdfDownloadIncompleteError("pdf_attachment_enumeration_failed") from e
+
+            register_expected_pdf_slots(PDF_SALES_DIR, order_no, global_car_no, total_pics, indexed=True)
 
             # 时间无效且没有附件时，仍保持原先“不写入”的处理。
             # 但只要发现附件，就必须继续下载并写入 Excel。
@@ -5552,9 +6016,8 @@ def run_full_flow_for_account(phone):
                     if ok:
                         download_success_count += 1
 
-            # 如果有附件但部分/全部下载失败，也写到备注2，便于后续核查
-            if download_success_count < total_pics:
-                info["备注2"] = f"磅单附件共{total_pics}个，成功下载{download_success_count}个，存在下载失败"
+            require_pdf_downloads_complete(total_pics, download_success_count)
+            complete_expected_pdf_slots(PDF_SALES_DIR, order_no, global_car_no)
 
             print(f"\n✅ 销售单提取成功 [{order_no}] -> 写入 Excel")
             target_row = write_data_to_excel(
@@ -5589,10 +6052,17 @@ def run_full_flow_for_account(phone):
             print("\n  [加速滚动] 大跨步上移...")
             swipe_with_brake(driver, 1800, 700)
         else:
-            if driver.page_source == last_page_source:
+            if wireless_link.is_enabled() and _ui_pause_if_external("sales_page_end"):
+                last_page_source = ""
+                continue
+            current_page_source = driver.page_source
+            if wireless_link.is_enabled() and _ui_pause_if_external("sales_page_end"):
+                last_page_source = ""
+                continue
+            if current_page_source == last_page_source:
                 print("\n✅销售单处理完毕！")
                 break
-            last_page_source = driver.page_source
+            last_page_source = current_page_source if wireless_link.is_enabled() else driver.page_source
             print("\n  [微调滚动] 卡片半遮挡，小碎步对齐...")
             swipe_with_brake(driver, 1800, 1300)
 
@@ -5644,6 +6114,8 @@ try:
                 })
                 break
             except Exception as e:
+                if isinstance(e, (AppiumSessionOwnershipError, wireless_link.ConnectionUnavailable)):
+                    raise
                 session_lost = is_appium_session_lost(e)
                 login_failed = isinstance(e, AccountLoginError)
                 sales_entry_failed = isinstance(e, SalesEntryError)
@@ -5711,6 +6183,7 @@ try:
                     )
                 break
 
+    assert_all_pdf_batches_complete((PDF_PURCHASE_DIR, PDF_SALES_DIR, PDF_PURCHASE_SHANGHAI_DIR, PDF_SALES_SHANGHAI_DIR))
     if _account_failures:
         print("STATUS:YYB_DONE_WITH_WARNINGS|" + " | ".join(_account_failures), flush=True)
     else:
@@ -5718,11 +6191,20 @@ try:
     print("\n🎉 所有账号已全部循环完成！", flush=True)
 
 finally:
+    _session_release_confirmed = False
     try:
-        if driver is not None:
-            driver.quit()
+        if driver is not None and not _session_cleanup_uncertain:
+            if wireless_link.is_enabled():
+                _close_owned_appium_session(driver)
+            else:
+                driver.quit()
+        _session_release_confirmed = not _session_creation_outcome_uncertain and not _session_cleanup_uncertain
     finally:
-        print("🚀 所有自动化任务已结束，Appium 会话已释放。", flush=True)
+        print(
+            "🚀 所有自动化任务已结束，Appium 会话已释放。" if _session_release_confirmed
+            else "STATUS:YYB_SESSION_RELEASE_UNCONFIRMED|未创建替代会话，需核实本次归属会话。",
+            flush=True,
+        )
 
 print(
     'STATUS:YYB_ACCOUNT_SUMMARY|'

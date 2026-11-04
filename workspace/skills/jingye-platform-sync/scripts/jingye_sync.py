@@ -40,7 +40,7 @@ from jingye_store import (
 LOGGER = logging.getLogger("jingye-platform-sync")
 DEFAULT_PROJECT_NAME = "敬业钢铁"
 DEFAULT_TEST_PROJECT_NAME = "612演示项目"
-DEFAULT_TEST_BASE_URL = "http://192.168.13.7:18100"
+DEFAULT_TEST_BASE_URL = "http://192.0.2.2:18100"
 DEFAULT_TEST_DB_NAME = "jingye_facts.test.sqlite3"
 DEFAULT_SOURCE_SYSTEM = "agent"
 DEFAULT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"

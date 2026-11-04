@@ -941,8 +941,8 @@ def execute_pipeline(
             refresh_result = run_step('refresh', command_map['refresh'])
             results.append(refresh_result)
             require_success(refresh_result)
-            update_crawl_scopes(db_path, run_id, windows)
             require_success(crawl_result)
+            update_crawl_scopes(db_path, run_id, windows)
 
             for name in (
                 'attachments', 'oss_upload', 'validate_upload', 'platform_upload'

@@ -18,3 +18,13 @@ output/
 logs/
 .venv/
 venv/
+
+# Wireless review: private runtime/device/build evidence stays local
+**/build-private/
+**/build-deps/
+**/build/
+*.private.*
+*.apk
+*.p12
+*.jks
+*.keystore

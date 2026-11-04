@@ -1,6 +1,6 @@
 $env:PYTHONIOENCODING = 'utf-8'
-$py = 'C:\Users\SXL\OpenClawNative\python-venv\Scripts\python.exe'
-$script = 'C:\Users\SXL\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
+$py = 'C:\Users\YOUR_USER\OpenClawNative\python-venv\Scripts\python.exe'
+$script = 'C:\Users\YOUR_USER\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
 $baseDir = 'D:\openclaw_data\data\jingyeapp'
 $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
 $log = "$baseDir\cron_log_$ts.txt"

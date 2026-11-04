@@ -22,8 +22,8 @@ description: 敬业运输数据库对账流程。用户说“敬业对账”时�
 收到合法采购日期后，后台启动：
 
 ```powershell
-$py = 'C:\Users\SXL\OpenClawNative\python-venv\Scripts\python.exe'
-$script = 'C:\Users\SXL\.openclaw-migration\workspace\skills\jingye-reconciliation\scripts\jingye_reconcile.py'
+$py = 'C:\Users\YOUR_USER\OpenClawNative\python-venv\Scripts\python.exe'
+$script = 'C:\Users\YOUR_USER\.openclaw-migration\workspace\skills\jingye-reconciliation\scripts\jingye_reconcile.py'
 $baseDir = 'D:\openclaw_data\data\jingyeapp'
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
 $stdout = Join-Path $baseDir "reconciliation_${stamp}.out.log"

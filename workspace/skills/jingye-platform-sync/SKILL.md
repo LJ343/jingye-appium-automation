@@ -47,8 +47,8 @@ python skills/jingye-platform-sync/scripts/jingye_pipeline.py --anchor-date 2026
 确认后在后台启动，不等待长任务完成：
 
 ```powershell
-$py = 'C:\Users\SXL\OpenClawNative\python-venv\Scripts\python.exe'
-$script = 'C:\Users\SXL\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
+$py = 'C:\Users\YOUR_USER\OpenClawNative\python-venv\Scripts\python.exe'
+$script = 'C:\Users\YOUR_USER\.openclaw-migration\workspace\skills\jingye-platform-sync\scripts\jingye_pipeline.py'
 $baseDir = 'D:\openclaw_data\data\jingyeapp'
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
 $stdout = Join-Path $baseDir "platform_backfill_${stamp}.out.log"
