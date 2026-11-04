@@ -1,9 +1,9 @@
 {
-  "status": "locally_deployed_verified_long_observation_pending",
+  "status": "live_passed_pending_publication",
   "scan_passed": true,
   "findings": [],
   "baseline_files": 43,
-  "export_files_before_metadata": 74,
+  "export_files_before_metadata": 75,
   "runtime_overlay_count": 6,
   "helper_source_only": true,
   "real_env_read": false,
@@ -18,68 +18,10 @@
     "hardcoded_api_secret_removed": 2,
     "device_serial_replaced": 5
   },
-  "source_manifest_sha256": "228bce3207db760996f86a0b0921f29b87e5d3133b43cdd57d9dd2e88cdf03a5",
+  "source_manifest_sha256": "ae191e425f2a2a542bb2ff4098bb43e5899fde183cf412d5c44dc6fcd1350e41",
   "git_modified": false,
   "pushed": false,
   "deployed": true,
-  "offline_tests": [
-    {
-      "suite": "reconciliation",
-      "test_count": 125,
-      "passed": true
-    },
-    {
-      "suite": "platform",
-      "test_count": 13,
-      "passed": true
-    },
-    {
-      "suite": "general",
-      "test_count": 59,
-      "passed": true
-    }
-  ],
-  "offline_test_total": 197,
-  "exporter_source_sha256": "b3678080fde62d28f6be22e9139a3e2a7e9ccb1673535fabfb2f9394a951d74c",
-  "all_export_hashes_verified": true,
-  "excluded_artifact_scan_passed": true,
-  "physical_file_count": 76,
-  "final_phone_acceptance": {
-    "manual_wifi_off_on_passed": true,
-    "seconds_from_observed_loss_to_connection": 46.266,
-    "synthetic_files_verified": 606,
-    "synthetic_unique_files": 202,
-    "new_phone_cleanup_full_live_arm": "passed",
-    "full_unattended_release_accepted": false,
-    "new_phone_cleanup_sessions": 2,
-    "new_phone_cleanup_verified_fixtures": 6,
-    "new_phone_cleanup_first_session_confirmed_signals": 1,
-    "new_phone_cleanup_second_session_confirmed_signals": 0,
-    "final_candidate_business_crawl": "passed_with_recovery_and_one_freight_business_pending",
-    "production_deployment_performed": true,
-    "representative_account_count": 1,
-    "representative_account_attempts": 2,
-    "representative_login_submissions": 2,
-    "representative_duration_seconds": 526.799,
-    "purchase_pdf_expected": 1,
-    "purchase_pdf_verified": 1,
-    "sales_pdf_expected": 2,
-    "sales_pdf_verified": 2,
-    "pdf_sidecars_verified": 3,
-    "part_files": 0,
-    "freight_targets": 2,
-    "freight_successes": 1,
-    "freight_failed_cards": 0,
-    "freight_failed_waybills": 0,
-    "freight_missing_business_pending": 1,
-    "external_stages_executed": false,
-    "postdeployment_verification": "passed",
-    "screen_hold_case_passed": true,
-    "screen_observed_hold_seconds": 40.0,
-    "three_hour_connection_observation": "started_not_completed"
-  },
-  "postdeployment_verification_passed": true,
-  "long_connection_observation": "started_not_completed",
-  "business_long_test_performed": false,
-  "usb_main_preserved": true
+  "companionVersion": "0.2-review",
+  "companionSourceAggregateSHA256": "6a522773afb52f5a3520dd2bacf341ed1e3259833fb06e0406dbaac487866b5b"
 }

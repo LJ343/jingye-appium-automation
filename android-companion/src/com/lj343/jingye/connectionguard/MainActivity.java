@@ -28,13 +28,14 @@ public final class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
-        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 审阅测试版"); title.setTextSize(23); layout.addView(title);
+        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 0.2 审阅测试版"); title.setTextSize(23); layout.addView(title);
         TextView explanation = new TextView(this);
         explanation.setText("默认不启用。只有您点击开始后，助手才会尝试恢复无线调试。\n\n"
                 + "启用期间，系统关闭无线调试后可能被恢复；要手动保持关闭，请先暂停并停止助手。"
                 + "遇到未信任网络仍需系统确认，助手不自动批准。\n\n"
                 + "每次故障在 Wi-Fi 稳定后只尝试一次。开关持续开启 30 秒后才接受下一次故障；"
-                + "期间复位或按系统时间计十分钟达到三次恢复，会暂停，须您主动恢复。"
+                + "期间复位后仅观察系统开关，不重复写入；系统自行开启并稳定 30 秒才重新布防。"
+                + "按系统时间计十分钟达到三次恢复，或权限/系统接口失败，会暂停，须您主动恢复。"
                 + "每次恢复最多持有 25 秒唤醒锁。\n\n"
                 + "需要另行批准 WRITE_SECURE_SETTINGS 开发权限；本应用不会自行授予。"
                 + "不开机自启，系统仍可能结束后台进程，不能保证永久在线。\n");

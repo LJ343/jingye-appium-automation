@@ -194,7 +194,9 @@ public final class GuardService extends Service implements RecoveryController.Po
             case "WAIT_STABLE_WIFI": return "等待网络稳定，仅恢复一次";
             case "VERIFY_SWITCH_ONLY": return "已尝试恢复，正在观察系统开关";
             case "SWITCH_ON_PC_UNVERIFIED": return "系统开关已开启，电脑连接待验证";
-            case "SYSTEM_DID_NOT_KEEP_ON": return "系统未保持开启，可能需确认网络；不自动批准";
+            case "SYSTEM_DID_NOT_KEEP_ON": return "旧版系统复位暂停；需手动重新开始，不自动批准网络";
+            case "WAIT_EXTERNAL_ON": return "本次恢复未保持；只读等待系统开关开启，不重复写入或批准网络";
+            case "WAIT_EXTERNAL_ON_STABLE": return "系统开关已开启，观察稳定 30 秒后重新布防；电脑连接仍待验证";
             case "PERMISSION_MISSING": return "所需写入或通知权限不可用，已暂停";
             case "SETTING_WRITE_REJECTED": return "系统拒绝设置写入，已暂停";
             case "RATE_LIMITED": return "十分钟恢复已达三次，已暂停；请检查网络后手动恢复";

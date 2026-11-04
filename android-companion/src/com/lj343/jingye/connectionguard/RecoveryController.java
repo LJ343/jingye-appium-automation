@@ -44,7 +44,7 @@ public final class RecoveryController {
 
     private final Port port;
     private final Scheduler scheduler;
-    private boolean armed, wifi, enabled, attemptConsumed, seenEnabled;
+    private boolean armed, wifi, enabled, attemptConsumed, seenEnabled, externalWait;
     private String phase = "STOPPED", code = "USER_STOPPED";
     private long attempts, generation;
     private Runnable pending;
@@ -69,33 +69,39 @@ public final class RecoveryController {
     /** A user start resets the episode budget, never the persisted short-term rate limit. */
     public void start(boolean restoredConsumed) {
         cancelTimer(); port.releaseWake();
-        armed = true; attemptConsumed = restoredConsumed; seenEnabled = false;
+        armed = true; attemptConsumed = restoredConsumed; seenEnabled = false; externalWait = false;
         wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
         if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
+        // A consumed episode is restored read-only, including after service death.
+        if (attemptConsumed) { waitForExternalOn(); return; }
         if (!wifi) { set("WAIT_WIFI", "WAIT_WIFI"); return; }
         if (enabled) {
-            if (attemptConsumed) coolDown(REARM_MS);
-            else set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
+            set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
             return;
         }
-        if (attemptConsumed) { pause("SYSTEM_DID_NOT_KEEP_ON"); return; }
         stabilize();
     }
 
     public void stop() {
-        armed = false; cancelTimer(); port.releaseWake();
+        armed = false; externalWait = false; cancelTimer(); port.releaseWake();
         set("STOPPED", "USER_STOPPED");
     }
 
     /** Disposal does not persist a user stop; START_STICKY can restore the saved intent. */
     public void dispose() {
-        armed = false; cancelTimer(); port.releaseWake();
+        armed = false; externalWait = false; cancelTimer(); port.releaseWake();
     }
 
     public void networkChanged(boolean available) {
         boolean previously = wifi;
         wifi = available;
         if (!armed) { publish(); return; }
+        // Network loss/return must not replenish an unverified consumed episode.
+        if (externalWait) {
+            if (!available) resetExternalObservation();
+            else observeExternalOn();
+            return;
+        }
         if (!available) {
             cancelTimer(); port.releaseWake();
             set("WAIT_WIFI", "WAIT_WIFI"); return;
@@ -111,9 +117,14 @@ public final class RecoveryController {
     public void settingChanged() {
         enabled = port.readEnabled() == 1;
         if (!armed) { publish(); return; }
+        if (externalWait) {
+            if (!enabled) resetExternalObservation();
+            else observeExternalOn();
+            return;
+        }
         if ("VERIFYING".equals(phase)) {
             if (enabled) { seenEnabled = true; publish(); }
-            else if (seenEnabled) { pause("SYSTEM_DID_NOT_KEEP_ON"); }
+            else if (seenEnabled) { waitForExternalOn(); }
             else { publish(); }
             return;
         }
@@ -123,8 +134,8 @@ public final class RecoveryController {
             cancelTimer(); port.releaseWake();
             set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
         } else if (!"STABILIZING".equals(phase)) {
-            // A reset before the previous enable has remained stable requires a resume.
-            if (attemptConsumed) { pause("SYSTEM_DID_NOT_KEEP_ON"); }
+            // A reset before stability waits for a genuine external enable, without writing.
+            if (attemptConsumed) { waitForExternalOn(); }
             else { stabilize(); }
         }
     }
@@ -145,7 +156,7 @@ public final class RecoveryController {
         enabled = port.readEnabled() == 1;
         if (enabled) { port.releaseWake(); set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED"); return; }
         if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
-        if (attemptConsumed) { pause("SYSTEM_DID_NOT_KEEP_ON"); return; }
+        if (attemptConsumed) { waitForExternalOn(); return; }
         long now = port.nowMillis();
         // A backward wall-clock jump keeps future timestamps, conservatively limiting writes.
         recentAttempts.removeIf(time -> now >= time && now - time >= RATE_WINDOW_MS);
@@ -166,7 +177,7 @@ public final class RecoveryController {
             enabled = port.readEnabled() == 1;
             port.releaseWake();
             if (enabled) coolDown(REARM_MS - VERIFY_MS);
-            else pause("SYSTEM_DID_NOT_KEEP_ON");
+            else waitForExternalOn();
         });
         publish();
     }
@@ -178,15 +189,51 @@ public final class RecoveryController {
             wifi = port.wifiAvailable();
             if (!wifi) { networkChanged(false); return; }
             enabled = port.readEnabled() == 1;
-            if (!enabled) { pause("SYSTEM_DID_NOT_KEEP_ON"); return; }
+            if (!enabled) { waitForExternalOn(); return; }
             attemptConsumed = false;
             set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
         });
         publish();
     }
 
+    /** Keep the user's start intent and listeners, but never repeat this episode's write. */
+    private void waitForExternalOn() {
+        externalWait = true; attemptConsumed = true;
+        resetExternalObservation();
+        observeExternalOn();
+    }
+
+    private void resetExternalObservation() {
+        cancelTimer(); port.releaseWake();
+        set("WAIT_EXTERNAL_ON", "WAIT_EXTERNAL_ON");
+    }
+
+    /** Event-driven read-only observation: only a genuine stable ON can rearm. */
+    private void observeExternalOn() {
+        if (!armed || !externalWait) return;
+        wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
+        if (!wifi || !enabled) {
+            resetExternalObservation();
+            return;
+        }
+        if ("EXTERNAL_ON_STABILIZING".equals(phase)) { publish(); return; }
+        set("EXTERNAL_ON_STABILIZING", "WAIT_EXTERNAL_ON_STABLE");
+        later(REARM_MS, () -> {
+            if (!armed || !externalWait) return;
+            wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
+            if (!wifi || !enabled) {
+                // This timer has fired; do not preserve a stabilizing phase with no timer.
+                resetExternalObservation(); observeExternalOn(); return;
+            }
+            if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
+            externalWait = false; attemptConsumed = false;
+            set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
+        });
+        publish();
+    }
+
     private void pause(String reason) {
-        armed = false; cancelTimer(); port.releaseWake();
+        armed = false; externalWait = false; cancelTimer(); port.releaseWake();
         set("PAUSED", reason);
     }
 

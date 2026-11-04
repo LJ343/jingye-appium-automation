@@ -24,7 +24,8 @@ def load(wireless=True):
     class GuardError(RuntimeError):
         pass
     reservation = SimpleNamespace(created=Mock(), uncertain=Mock(), closed=Mock(), host={"pid": 42})
-    phone = SimpleNamespace(capture=Mock(), finish_after_quit=Mock())
+    phone = SimpleNamespace(capture=Mock(), finish_after_quit=Mock(), creation_token="offline-token",
+                            creation_transport="198.51.100.10:40000")
     options = SimpleNamespace(set_capability=Mock())
     link = SimpleNamespace(is_enabled=Mock(return_value=wireless),
                            ensure_connected=Mock(return_value="198.51.100.10:40000"),
@@ -40,7 +41,7 @@ def load(wireless=True):
         "StaleElementReferenceException": IndexError,
         "requests": SimpleNamespace(Session=Mock(), RequestException=RequestError),
         "appium_guard": SimpleNamespace(begin=Mock(return_value=reservation), GuardError=GuardError),
-        "appium_phone": SimpleNamespace(prepare=Mock(return_value=phone)),
+        "appium_phone": SimpleNamespace(prepare=Mock(return_value=phone), OWNERSHIP_CAPABILITY="jingye:ownershipToken"),
         "_session_creation_outcome_uncertain": False,
         "_session_cleanup_uncertain": False,
     }

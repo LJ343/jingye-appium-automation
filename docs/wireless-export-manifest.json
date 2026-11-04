@@ -1,5 +1,5 @@
 {
-  "status": "locally_deployed_verified_long_observation_pending",
+  "status": "live_passed_pending_publication",
   "baseline_commit": "d78ad89d88278f598e78be72cd26290895473627",
   "legacy_redactor_source_sha256": "fcfb827aea804f1b85f9b13b1c36acdd2ac737042e7d7ef7dff38e9d2cd15d3c",
   "runtime_overlay_count": 6,
@@ -32,10 +32,10 @@
       "path": "README.md",
       "origin": "usb_main_blob",
       "source_sha256": "dc0030199a201b4090ee4fd0126362dda6245c12b170304a000735e637d611dc",
-      "export_sha256": "50cf1e5382a7ebc09e6803931d905f4c8d9743c27c39597b12a45563dc522904",
+      "export_sha256": "f7aaa8ff3ef142f3d059b22fe270f83964694c3c596a39e3212910300905a764",
       "byte_identical": false,
       "redactions": {},
-      "postprocess": "local deployment and independent verification recorded; long observation pending"
+      "postprocess": "bounded live acceptance and production deployment recorded; publication pending"
     },
     {
       "path": "android-companion/.gitignore",
@@ -48,16 +48,16 @@
     {
       "path": "android-companion/AndroidManifest.xml",
       "origin": "isolated_android_companion_source",
-      "source_sha256": "1516d55c7b88bcae8efc05bd21ad3e67763684b36fbb913883e4e33cc3d2eb66",
-      "export_sha256": "1516d55c7b88bcae8efc05bd21ad3e67763684b36fbb913883e4e33cc3d2eb66",
+      "source_sha256": "7baeb2ea9e401003e832d0a307ac68858fd707b6d7228e1acaa02d6f8aa242ab",
+      "export_sha256": "7baeb2ea9e401003e832d0a307ac68858fd707b6d7228e1acaa02d6f8aa242ab",
       "byte_identical": true,
       "redactions": {}
     },
     {
       "path": "android-companion/README.md",
       "origin": "generated_release_pending_document",
-      "export_sha256": "7bfbf162c1959f5196e291f8878d738134b7135160a5e669e71ff6abd32bdd78",
-      "postprocess": "local deployment and independent verification recorded; long observation pending"
+      "export_sha256": "1ebadb3bcbeb79c2663058b2812df64b0b70f341a8b921074790eb9edec00a58",
+      "postprocess": "bounded live acceptance and production deployment recorded; publication pending"
     },
     {
       "path": "android-companion/build-companion.ps1",
@@ -108,24 +108,24 @@
     {
       "path": "android-companion/src/com/lj343/jingye/connectionguard/GuardService.java",
       "origin": "isolated_android_companion_source",
-      "source_sha256": "3cff1e863ef2d7792c5c9e8030524e6960ce0e25426f7d6c7795006ddf46bd9f",
-      "export_sha256": "3cff1e863ef2d7792c5c9e8030524e6960ce0e25426f7d6c7795006ddf46bd9f",
+      "source_sha256": "ecb7777da33856509dd29a4175632e4319c81fc3b32ffab429a15d44191a2b82",
+      "export_sha256": "ecb7777da33856509dd29a4175632e4319c81fc3b32ffab429a15d44191a2b82",
       "byte_identical": true,
       "redactions": {}
     },
     {
       "path": "android-companion/src/com/lj343/jingye/connectionguard/MainActivity.java",
       "origin": "isolated_android_companion_source",
-      "source_sha256": "2cd026bfd102c97128d3bee4e2db26d1cedc130164ad7a9b028f9898ebb9a114",
-      "export_sha256": "2cd026bfd102c97128d3bee4e2db26d1cedc130164ad7a9b028f9898ebb9a114",
+      "source_sha256": "12d77d4edd2388c10f15f536f3233d0111f0a445aae5868343e7ba76ac73a3e5",
+      "export_sha256": "12d77d4edd2388c10f15f536f3233d0111f0a445aae5868343e7ba76ac73a3e5",
       "byte_identical": true,
       "redactions": {}
     },
     {
       "path": "android-companion/src/com/lj343/jingye/connectionguard/RecoveryController.java",
       "origin": "isolated_android_companion_source",
-      "source_sha256": "0518ca5a7c974e1b295a7539e8d011de37ded06cd3fe4bd2cbe1943cd71290dc",
-      "export_sha256": "0518ca5a7c974e1b295a7539e8d011de37ded06cd3fe4bd2cbe1943cd71290dc",
+      "source_sha256": "a3ac02c3f06d9ff532445f652dae417a6d4f7cc63525c169640cd2e229753274",
+      "export_sha256": "a3ac02c3f06d9ff532445f652dae417a6d4f7cc63525c169640cd2e229753274",
       "byte_identical": true,
       "redactions": {}
     },
@@ -156,8 +156,8 @@
     {
       "path": "android-companion/tests/com/lj343/jingye/connectionguard/RecoveryControllerTest.java",
       "origin": "isolated_android_companion_source",
-      "source_sha256": "7993ba0ef58d699d0d4f82357f09607ffee6ab391dabc8255968fc38bf2b31be",
-      "export_sha256": "7993ba0ef58d699d0d4f82357f09607ffee6ab391dabc8255968fc38bf2b31be",
+      "source_sha256": "4842c706425b7ae88294e4690535ac98abd0e460556b65f998984f11b91b7823",
+      "export_sha256": "4842c706425b7ae88294e4690535ac98abd0e460556b65f998984f11b91b7823",
       "byte_identical": true,
       "redactions": {}
     },
@@ -187,9 +187,9 @@
     },
     {
       "path": "docs/WIRELESS_RELEASE.md",
-      "origin": "generated_release_document",
-      "export_sha256": "882f83764f18dd3c530c60f2ba15691956183b5719bdeadba349d2ceed2f45e3",
-      "postprocess": "local deployment and independent verification recorded; long observation pending"
+      "origin": "generated_release_pending_document",
+      "export_sha256": "c0b0915415b220321194dd8519e130b17b142e8b01a33b061efabc0b1fa43b43",
+      "postprocess": "bounded live acceptance and production deployment recorded; publication pending"
     },
     {
       "path": "docs/export-manifest.json",
@@ -537,8 +537,8 @@
     {
       "path": "workspace/skills/jingye-reconciliation/scripts/jingye_appium_ownership.py",
       "origin": "frozen_wireless_candidate",
-      "source_sha256": "4d50df173f1225b86c076245b3d6e2f659d7c6f097923f455643cb8b480ff440",
-      "export_sha256": "4d50df173f1225b86c076245b3d6e2f659d7c6f097923f455643cb8b480ff440",
+      "source_sha256": "cfb1bfdad0d3bcfedc51f8171d3a514ccb111b2a0e9ced6763cfda6618e83e1c",
+      "export_sha256": "cfb1bfdad0d3bcfedc51f8171d3a514ccb111b2a0e9ced6763cfda6618e83e1c",
       "byte_identical": true,
       "redactions": {}
     },
@@ -579,8 +579,8 @@
     {
       "path": "workspace/skills/jingye-reconciliation/scripts/yyb_search.py",
       "origin": "frozen_wireless_candidate",
-      "source_sha256": "ce337b03cd6692dda1c393afb4cad7192d7899b2c89992994173d04fdd2578b9",
-      "export_sha256": "182006afab39c3ab3262e3803bd930d259dd9e20c3bed34c547f30d9f83eb5f3",
+      "source_sha256": "0a5d6f579b42857786c84199f28c7409cbf73ade0337d4ff910af63808a88b53",
+      "export_sha256": "0d02b1d5d54561097de0584a0183ec22faafbf9ca6c6fcef9bb69dbf7b891efb",
       "byte_identical": false,
       "redactions": {
         "hardcoded_api_secret_removed": 2,
@@ -589,6 +589,14 @@
         "device_serial_replaced": 1,
         "private_ipv4_replaced": 1
       }
+    },
+    {
+      "path": "workspace/skills/jingye-reconciliation/tests/test_creation_capture_recovery.py",
+      "origin": "candidate_offline_tests",
+      "source_sha256": "40686d83f58b027ded47dd663fea4cc06313a0635a02a1b9d19822b4c25a19eb",
+      "export_sha256": "40686d83f58b027ded47dd663fea4cc06313a0635a02a1b9d19822b4c25a19eb",
+      "byte_identical": true,
+      "redactions": {}
     },
     {
       "path": "workspace/skills/jingye-reconciliation/tests/test_freight_matching.py",
@@ -619,8 +627,8 @@
     {
       "path": "workspace/skills/jingye-reconciliation/tests/test_phone_process_ownership.py",
       "origin": "candidate_offline_tests",
-      "source_sha256": "9b626c7575cf9d4f26b1f512701acab6fe2d2804a658fa2bab185318591cb9ad",
-      "export_sha256": "9b626c7575cf9d4f26b1f512701acab6fe2d2804a658fa2bab185318591cb9ad",
+      "source_sha256": "4658db427132ef16eb49303861df707fb91e1e3b37678c079d0d6a5ad3d99a3b",
+      "export_sha256": "4658db427132ef16eb49303861df707fb91e1e3b37678c079d0d6a5ad3d99a3b",
       "byte_identical": true,
       "redactions": {}
     },
@@ -635,8 +643,8 @@
     {
       "path": "workspace/skills/jingye-reconciliation/tests/test_wireless_session_ownership.py",
       "origin": "candidate_offline_tests",
-      "source_sha256": "edbef8e882974f50d4e11d5d09592d4654b41e40cd9bd560bf4b51085c271178",
-      "export_sha256": "edbef8e882974f50d4e11d5d09592d4654b41e40cd9bd560bf4b51085c271178",
+      "source_sha256": "660dfc41562ad1ba36a551bbe65ebea4514f6b0018455ae4f5c3a21d1caa6b72",
+      "export_sha256": "660dfc41562ad1ba36a551bbe65ebea4514f6b0018455ae4f5c3a21d1caa6b72",
       "byte_identical": true,
       "redactions": {}
     },
@@ -653,8 +661,28 @@
       }
     }
   ],
-  "postdeployment_verification": "passed",
-  "long_connection_observation": "started_not_completed",
-  "business_long_test_performed": false,
-  "usb_main_preserved": true
+  "companion": {
+    "versionCode": 2,
+    "versionName": "0.2-review",
+    "rawSourceAggregateSHA256": "6a522773afb52f5a3520dd2bacf341ed1e3259833fb06e0406dbaac487866b5b",
+    "sourceFileCount": 7,
+    "offlineTestsPassed": 31,
+    "permissionsChanged": false,
+    "liveAcceptance": "bounded_controlled_recovery_passed",
+    "apkIncluded": false
+  },
+  "runtimeOfflineTestsPassed": 213,
+  "boundedLiveAcceptance": {
+    "preCaptureEndpointChange": true,
+    "sessionsClosed": 2,
+    "normalQuitHttp200": 2,
+    "ownedSignals": 1,
+    "physicalTerminalVerified": true,
+    "syntheticPullsVerified": 202,
+    "uniqueFixturesVerified": 202,
+    "transferFailures": 0,
+    "productionRuntimeFilesChanged": 2,
+    "schedulesPreserved": true,
+    "longTermUnattendedGuarantee": false
+  }
 }

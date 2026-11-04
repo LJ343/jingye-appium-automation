@@ -1,6 +1,6 @@
-# Wireless release: local deployment verified
+# Wireless recovery repair 0.2-review
 
-The release owner has deployed the reviewed wireless runtime locally and passed independent postdeployment verification. See the [wireless release record](docs/WIRELESS_RELEASE.md) for scoped tests, the recovered account crawl and ongoing, not completed three-hour connection observation. USB main remains the preserved baseline. This staging exporter has performed no Git publication. The USB baseline description below remains historical context.
+The two runtime repairs were deployed after the controlled live acceptance passed. See [wireless repair evidence and limits](docs/WIRELESS_RELEASE.md). The matching APK and verification files are distributed through the repository Release. The preserved USB baseline description below remains historical context.
 
 # 敬业 Appium 自动化
 

@@ -499,6 +499,14 @@ def create_appium_session(reason, max_attempts=2):
                     wireless_link, APPIUM_SERVER_URL, reservation.host,
                     host_probe=appium_guard.query_local_host,
                 )
+                # Preparation may itself recover a changed TLS endpoint. The
+                # Remote must use the transport of that completed idle baseline.
+                ADB_SERIAL = phone_owner.creation_transport
+                options.set_capability("appium:deviceName", ADB_SERIAL)
+                options.set_capability("appium:udid", ADB_SERIAL)
+                # Opaque per-creation metadata, read back only from the actual
+                # UiA2 session when transport changes before ownership capture.
+                options.set_capability(appium_phone.OWNERSHIP_CAPABILITY, phone_owner.creation_token)
                 client = AppiumClientConfig(remote_server_addr=APPIUM_SERVER_URL, timeout=260, keep_alive=True)
                 remote_attempted = True
                 candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options, client_config=client)

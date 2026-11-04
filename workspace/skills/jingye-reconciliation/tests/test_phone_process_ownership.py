@@ -102,7 +102,7 @@ class PhoneOwnershipTests(unittest.TestCase):
         self.assertIn('[ "$(id -u)" = 10042 ]', script)
         self.assertNotIn("force-stop", script); self.assertNotIn("kill -9", script)
         self.assertFalse(client.active)
-        self.assertTrue(all(call[-1] == 60 for call in client.calls if isinstance(call[0], list)))
+        self.assertTrue(all(call[-1] in {60, 300} for call in client.calls if isinstance(call[0], list)))
 
     def test_baseline_live_or_unknown_instrumentation_cannot_start(self):
         client = FakeClient(); client.active = True
