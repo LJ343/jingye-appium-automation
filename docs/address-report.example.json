@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "listen_ipv4": "192.168.50.2",
+  "listen_port": 37729,
+  "reporter_id": "GENERATE_16_RANDOM_BYTES_AS_32_HEX",
+  "shared_key_hex": "GENERATE_32_RANDOM_BYTES_AS_64_HEX",
+  "allowed_ipv4_cidrs": [
+    "192.168.50.0/24"
+  ],
+  "verified_cache_path": "C:/Users/YOUR_USER/operations/private/jingye-verified-endpoint.private.json"
+}

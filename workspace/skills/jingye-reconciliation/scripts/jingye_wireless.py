@@ -156,6 +156,11 @@ class WirelessADB:
         self.lock = threading.RLock()
         self.serial = None
         self.discovery_reason = None
+        self._address_receiver = None
+        self._address_receiver_attempted = False
+        self._reported_ip = None
+        self._saved_endpoint = None
+        self._discovery_addresses = None
         self._last_heartbeat = float("-inf")
         self._verify_binary()
 
@@ -180,7 +185,15 @@ class WirelessADB:
         try:
             yield deadline
         finally:
-            self.lock.release()
+            receiver = self._address_receiver
+            self._address_receiver = None
+            self._address_receiver_attempted = False
+            self._reported_ip = None
+            try:
+                if receiver is not None:
+                    receiver.close()
+            finally:
+                self.lock.release()
 
     def _log(self, event, **fields):
         # No device ro.serialno, raw stdout/stderr, UI, filenames or credentials.
@@ -262,6 +275,13 @@ class WirelessADB:
             if _endpoint(serial):
                 # Cache only an authenticated endpoint, in memory; never rewrite config.
                 self.cached_endpoint = serial
+                if self._reported_ip == serial.rsplit(":", 1)[0] and self._saved_endpoint != serial:
+                    try:
+                        from jingye_wireless_address import save_verified_endpoint
+                        save_verified_endpoint(self.config["address_report"], serial, self.identity_hash)
+                        self._saved_endpoint = serial
+                    except (OSError, ValueError, TypeError):
+                        self._log("verified_endpoint_cache_unavailable")
             return True
         except (subprocess.TimeoutExpired, OSError, ConnectionUnavailable) as error:
             if isinstance(error, ConnectionUnavailable):
@@ -300,15 +320,36 @@ class WirelessADB:
                     if serial != previous_serial:
                         self._log("connection_verified")
                     return serial
-            discovery_config = self.config.get("discovery") or {}
+            report_config = self.config.get("address_report") or {}
+            if report_config.get("enabled") is True and not self._address_receiver_attempted:
+                self._address_receiver_attempted = True
+                try:
+                    from jingye_wireless_address import AddressReceiver
+                    self._address_receiver = AddressReceiver(report_config).start()
+                    self._log("address_receiver_waiting")
+                except (OSError, ValueError, TypeError, ImportError):
+                    self._log("address_receiver_unavailable")
+            reported_ip = self._address_receiver.latest_ip() if self._address_receiver is not None else None
+            discovery_config = dict(self.config.get("discovery") or {})
+            if reported_ip is not None:
+                # Signed fresh rendezvous changes ONE target, never scans its subnet.
+                if reported_ip != self._reported_ip:
+                    self._log("authenticated_phone_address_received")
+                self._reported_ip = reported_ip
+                discovery_config["allowed_ipv4"] = [reported_ip]
+            elif self._reported_ip is not None:
+                # Do not continue probing a stale address after a report expires.
+                self._reported_ip = None
             if discovery_config.get("enabled") is True:
                 try:
                     from jingye_wireless_discovery import EndpointDiscovery
                 except ImportError:
                     raise ConnectionUnavailable("wireless_discovery_module_missing") from None
-                if not hasattr(self, "_discovery"):
+                addresses = tuple(discovery_config.get("allowed_ipv4", ()))
+                if not hasattr(self, "_discovery") or self._discovery_addresses != addresses:
                     try:
                         self._discovery = EndpointDiscovery(discovery_config)
+                        self._discovery_addresses = addresses
                     except (TypeError, ValueError):
                         raise ConnectionUnavailable("wireless_discovery_config_invalid") from None
                 serial = self._discovery.discover(

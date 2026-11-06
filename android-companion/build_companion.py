@@ -16,7 +16,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 JDK = Path(r"C:\Program Files\Java\jdk-25.0.3\bin")
 TOOLS = Path(r"C:\Users\YOUR_USER\adb\build-tools\35.0.0")
-PLATFORM = ROOT / "build-deps" / "android.jar"
+PLATFORM = Path(r"C:\Users\YOUR_USER\.openclaw-migration\migration\review-20261104-jingye-connection-recovery\android-companion\build-deps\android.jar")
 
 
 def sha256(path):
@@ -99,18 +99,12 @@ def build(expected):
     shutil.copyfile(unsigned_output / "jingye-connectionguard-unsigned.apk", unsigned)
     aligned = run / "companion-aligned.apk"
     command("zipalign", [tool_files["zipalign"], "-P", "16", "4", unsigned, aligned])
-    private = ROOT / "build-private"
-    private.mkdir(exist_ok=True)
+    private = Path(r"C:\Users\YOUR_USER\.openclaw-migration\migration\review-20261104-jingye-connection-recovery\android-companion\build-private")
     keystore, password_file = private / "companion-review.p12", private / "keystore-password.private.txt"
     if keystore.exists() != password_file.exists():
         raise RuntimeError("signing_material_incomplete_no_replacement")
     if not keystore.exists():
-        with password_file.open("x", encoding="ascii") as stream:
-            stream.write(secrets.token_urlsafe(48) + "\n")
-        command("keytool", [tool_files["keytool"], "-genkeypair", "-noprompt", "-storetype", "PKCS12",
-                            "-keystore", keystore, "-storepass:file", password_file,
-                            "-alias", "companion-review", "-keyalg", "RSA", "-keysize", "3072",
-                            "-validity", "3650", "-dname", "CN=Local Connection Companion Review"])
+        raise RuntimeError("existing_signer_required_no_key_generation")
     signed = run / "connection-companion-review.apk"
     command("apksigner_sign", [tool_files["java"], "-jar", tool_files["apksigner"], "sign",
                                "--ks", keystore, "--ks-key-alias", "companion-review",

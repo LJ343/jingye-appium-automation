@@ -12,8 +12,7 @@ import unittest
 from unittest import mock
 
 
-MODULE_PATH = (Path(__file__).resolve().parents[1] / "workspace" / "skills" /
-               "jingye-reconciliation" / "scripts" / "jingye_wireless.py")
+MODULE_PATH = (Path(__file__).resolve().parents[1] / "workspace/skills/jingye-reconciliation/scripts" / "jingye_wireless.py")
 OLD = "192.0.2.10:41001"
 NEW = "192.0.2.10:41002"
 IDENTITY = "mock-owned-phone"

@@ -1,3 +1,7 @@
+# 敬业连接恢复助手 0.3-review
+
+0.3 has been installed and verified. Read [address-report configuration, permission changes and acceptance](ADDRESS_REPORT.md) first. The 0.2 recovery policy below is retained as historical explanation; its RecoveryController, FailureBoundary and StateStore remain byte-identical.
+
 # 敬业连接恢复助手 0.2-review：已部署修复版
 
 本导出仅含显式允许的源码、离线测试与构建脚本，不含 APK、SDK 依赖、日志、诊断回执或签名材料。7 个 Manifest/Java 文件对应已审源码 aggregate `6a522773afb52f5a3520dd2bacf341ed1e3259833fb06e0406dbaac487866b5b`，31 项实际状态机测试通过。同证书 APK 已由主任务另行构建；已同包同签名升级并核验手机base.apk字节、可见启动与前台服务；本次已完成受控无线中断后的同机连接恢复、会话创建前捕获故障收口和两项电脑运行源部署。对应APK与校验文件通过仓库Release单独提供；这些有限验收不等同长期无人值守保证。本版修复早期复位后永久撤销监听的问题，改为只读等待外部开关恢复，不循环写开关，不批准未知网络。不承诺 24 小时常驻、手机重启恢复、系统强杀后恢复或未知网络自动确认。
@@ -33,11 +37,11 @@
 | `POST_NOTIFICATIONS` | 用户开始时经系统请求，保留可见状态与停止入口；拒绝时不启动。 |
 | `WAKE_LOCK` | 只在 4 秒稳定等待及 12 秒观察窗口中使用；每次系统强制超时最多 25 秒，结束、暂停、断网或停止均释放。30 秒重新接纳间隔不持锁。 |
 
-没有 INTERNET、定位、存储、账号、Accessibility、Root、USB 模式更改、网络信任修改、后台定位或电池豁免申请权限。系统设置页面入口只是打开本应用的常规信息页，不自动修改任何电池策略。
+0.3新增INTERNET，仅用于指定电脑的认证地址上报；没有定位、存储、账号、Accessibility、Root、USB 模式更改、网络信任修改、后台定位或电池豁免申请权限。系统设置页面入口只是打开本应用的常规信息页，不自动修改任何电池策略。
 
 ## 可见诊断
 
-页面提供刷新和复制诊断；诊断只含固定状态码、时间、计数、最近 40 条状态变化。保存在本应用私有 SharedPreferences，不发送网络。复制会放入系统剪贴板，只在用户点击时执行。
+页面提供刷新和复制诊断；诊断只含固定状态码、时间、计数、最近 40 条状态变化。诊断保存在本应用私有 SharedPreferences；0.3的独立地址通道仅向指定电脑发送认证协议报文，不发送这些诊断。复制会放入系统剪贴板，只在用户点击时执行。
 
 另有只读 ContentProvider：`content://com.lj343.jingye.connectionguard.status/status`，读权限要求系统 `android.permission.DUMP`，用于已授权的 shell 检查。只接受没有 projection/selection/query 参数的 `/status` 查询；insert/update/delete 一律拒绝，查询不启停服务、不写设置、不触发恢复。普通第三方应用没有 DUMP 权限。状态来自最近一次上报，系统强杀后可能过时，所以字段以 `last_report` 命名，必须核对上报时间及实际设备连接，不能据此宣称进程存活。
 

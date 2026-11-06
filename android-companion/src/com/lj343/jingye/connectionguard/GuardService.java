@@ -32,6 +32,7 @@ public final class GuardService extends Service implements RecoveryController.Po
     private ConnectivityManager connectivity;
     private RecoveryController controller;
     private StateStore store;
+    private AddressReporter addressReporter;
     private PowerManager.WakeLock wakeLock;
     private boolean watching, observerAttempted, networkAttempted, foreground, lastStoreOk = true;
     private boolean fatal, destroying;
@@ -40,6 +41,7 @@ public final class GuardService extends Service implements RecoveryController.Po
         @Override public void onAvailable(Network network) { refreshNetwork(); }
         @Override public void onLost(Network network) { refreshNetwork(); }
         @Override public void onCapabilitiesChanged(Network n, NetworkCapabilities caps) { refreshNetwork(); }
+        @Override public void onLinkPropertiesChanged(Network n, android.net.LinkProperties props) { refreshNetwork(); }
     };
     private final ContentObserver setting = new ContentObserver(handler) {
         @Override public void onChange(boolean selfChange) {
@@ -51,6 +53,7 @@ public final class GuardService extends Service implements RecoveryController.Po
         super.onCreate();
         guarded(() -> {
             store = new StateStore(this);
+            addressReporter = new AddressReporter(this);
             connectivity = getSystemService(ConnectivityManager.class);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                     "JingyeConnectionGuard:bounded-recovery");
@@ -136,6 +139,7 @@ public final class GuardService extends Service implements RecoveryController.Po
                 // Persist revoked recovery intent before cancellation or notification APIs.
                 () -> { if (store != null) store.platformFailure(); },
                 () -> { if (controller != null) controller.dispose(); },
+                () -> { if (addressReporter != null) addressReporter.close(); },
                 () -> handler.removeCallbacksAndMessages(null),
                 this::unwatchBestEffort,
                 this::releaseWake,
@@ -173,6 +177,7 @@ public final class GuardService extends Service implements RecoveryController.Po
         if (fatal || destroying) return;
         lastStoreOk = store.save(state, true);
         if (!lastStoreOk) throw new IllegalStateException("STATE_PERSIST_FAILED");
+        if (addressReporter != null) addressReporter.setEnabled(state.armed && state.wifi && state.enabled);
         if (foreground) getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification(statusText(state.code)));
         if (!state.armed && !unwatchBestEffort()) throw new IllegalStateException("WATCH_CLEANUP_FAILED");
     }
@@ -209,6 +214,7 @@ public final class GuardService extends Service implements RecoveryController.Po
         destroying = true;
         boolean complete = FailureBoundary.cleanup(
                 () -> { if (controller != null) controller.dispose(); },
+                () -> { if (addressReporter != null) addressReporter.close(); },
                 () -> handler.removeCallbacksAndMessages(null),
                 () -> { if (!unwatchBestEffort()) throw new IllegalStateException("WATCH_CLEANUP_FAILED"); },
                 this::releaseWake,

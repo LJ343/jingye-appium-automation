@@ -9,13 +9,12 @@ import unittest
 from unittest.mock import patch
 
 
-SCRIPT = (Path(__file__).resolve().parents[1] / "workspace" / "skills" /
-          "jingye-reconciliation" / "scripts" / "jingye_wireless_discovery.py")
+SCRIPT = (Path(__file__).resolve().parents[1] / "workspace/skills/jingye-reconciliation/scripts" / "jingye_wireless_discovery.py")
 SPEC = importlib.util.spec_from_file_location("discovery_under_test", SCRIPT)
 discovery = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = discovery
 SPEC.loader.exec_module(discovery)
-HOST = "192.0.2.4"
+HOST = "192.168.50.53"
 
 
 class Clock:
@@ -122,7 +121,7 @@ class DiscoveryTests(unittest.TestCase):
         return discovery.EndpointDiscovery(config)
 
     def test_rejects_unsafe_config(self):
-        for override in ({"allowed_ipv4": []}, {"allowed_ipv4": ["192.0.2.3/24"]},
+        for override in ({"allowed_ipv4": []}, {"allowed_ipv4": ["192.168.50.0/24"]},
                          {"allowed_ipv4": ["localhost"]}, {"allowed_ipv4": ["127.0.0.1"]},
                          {"max_concurrency": 129}, {"scan_cooldown_s": 59},
                          {"port_range": [1, 65535]}, {"connect_timeout_s": float("nan")},
@@ -145,7 +144,7 @@ class DiscoveryTests(unittest.TestCase):
         calls = []
         endpoint = f"{HOST}:42029"
         helper = self.make()
-        result = helper.discover(endpoint, ["192.0.2.5:42029", endpoint,
+        result = helper.discover(endpoint, ["192.168.50.54:42029", endpoint,
                                             f"{HOST}:42030", f"{HOST}:42030"],
                                  lambda candidate, budget: calls.append(candidate) or candidate.endswith(":42030"))
         self.assertEqual(result, f"{HOST}:42030")

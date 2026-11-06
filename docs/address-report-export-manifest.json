@@ -1,0 +1,252 @@
+{
+  "schema": 1,
+  "previous_commit": "48fafee74edac1a465efa9c13e063d990de00923",
+  "branch": "wireless/unattended-20261104",
+  "release_tag": "wireless-recovery-0.3-20261106",
+  "source_aggregate_sha256": "52e6dea70351044430d8394803897df6a7f5be0ba4f97f3844f8013debde917a",
+  "deployment_performed": true,
+  "files": {
+    ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+    ".gitignore": "b05cca34b1d0930a4c7e4c5d4bb2c19803831ae501805d5f7779079e50ddebac",
+    "README.md": "26d79c8ca659c0546eb28f9ee9125af4d0e774b5bc51ec952775196f930519fe",
+    "requirements-observed.txt": "f9f921945302fbfcd71fece4b248101457aa7f2d88bab6c4f5221e195688e613",
+    "android-companion/.gitignore": "108879225820748d2de01f1d7f0d727111f6910daa881814c90be49adc535200",
+    "android-companion/ADDRESS_REPORT.md": "3d534ca4a9814ace06c29514fa45c5a4390389dc10c5bbd29ba6ba1fd13dec25",
+    "android-companion/AndroidManifest.xml": "ee9aa1e1622d6cba13841484f5494c3abca9d042a6c7125a11186832adc2da53",
+    "android-companion/build-companion.ps1": "270845fe5eb90da3e30b5caefdd82270f228bf6cdf389e22b1ff4065b3c94740",
+    "android-companion/build-unsigned.ps1": "f4b05f4b621ae923ee8ac3414548b5fd217153a65478f29a203d70028ae5435d",
+    "android-companion/build_companion.py": "2a2f6b01fe304e4db373a13accf95093f8656a0fb215a123babcbeefba483954",
+    "android-companion/fetch_build_dependency.py": "bcea60e765a0e9155710123a7d6d8e2b71c058c28e3544c18dcbe8d413ee4018",
+    "android-companion/README.md": "1760baa82ca6bd621ad511b06e01d9d1b2b002d5d7993278083f147d097e6a59",
+    "android-companion/test-offline.ps1": "1cc5688d036ad8e559c2e6ae7b17a2125788927704c8352658f3a70d2d24b2dd",
+    "docs/address-report.example.json": "8c26c209c48a72c8a6107ddd3c90155cc41548958d8e42151629b413e443167d",
+    "docs/export-manifest.json": "546a549f580edd6dc3ac0b048369c65005525d283a6a9a21fc74fa6df8595ea2",
+    "docs/KNOWN_ISSUES.md": "889ca24d0f8cd7c6e6529afc14855c6876a949799e8d578fc7466476d9fff64d",
+    "docs/REDACTION.md": "ada3944191d357cd6c751ed196608b552fbc555d4bde6ce2b1e87f74409682d3",
+    "docs/USB_BASELINE.md": "e6b05ff745f530589ca755e0af101668b879db82506508825aed8bc85ee5fee8",
+    "docs/wireless-export-manifest.json": "ae191e425f2a2a542bb2ff4098bb43e5899fde183cf412d5c44dc6fcd1350e41",
+    "docs/wireless-scanner-summary.json": "142b62cbbb53e69efe7494d674a3f4e033e55bbcbc703789e9130af129f25329",
+    "docs/WIRELESS_RELEASE.md": "c0b0915415b220321194dd8519e130b17b142e8b01a33b061efabc0b1fa43b43",
+    "docs/WIRELESS_RELEASE_0.3.md": "1d1fff2f3a4c7f824fd540986f08faa2f1d3a71344267e3b46a8b2f77fea634b",
+    "operations/Appium-Logs.cmd": "52a7e137d223d4c4bf97afe4e6d5a7b5585cf2fa864c762fc0263d3c839e529b",
+    "operations/Appium-Manage.ps1": "718818117c73fe8e806e27ea709fd6fc66a4f479b4c22aba23d878db27a62080",
+    "operations/Appium-Start.cmd": "50220852036b5e4a4bca90d09e18d0ffb79aab6866791001f11f542ae9a25553",
+    "operations/Appium-Status.cmd": "db51c4fa4f2d2b42ebea83d353118435345c27db1566d3d8c6a5cfffbb8f3afa",
+    "operations/Appium-Stop.cmd": "b5a95d92f40401719fa33f1c11c9c26b8d61866c4118f0269ab9e20c3d2a1fd8",
+    "operations/Appium-Watch.cmd": "fe351c187d3584d48101c54bceaf19f08cf7ef51eb4bf7358e6674436ad1ca7d",
+    "operations/Appium-使用说明.md": "f2e1c186a6d007909ac0ee11fe6ec9967e8b96cc6dbdc0434a0a60e655ace61d",
+    "operations/Appium.ps1": "a8ac058fedf4a3acebf0ed54a71d805394b9df39487b3aefbe924b41f89d1a94",
+    "operations/Jingye-Wireless-Status.cmd": "855def2bc2137f2446f670b87a7cfe89c03351f3ffb6c97f139fd12948f80b09",
+    "operations/Jingye-Wireless-Watch.cmd": "1095a806e956888a41d4a9bb32545c115bf21b71fe873b11aec8dc3a488042b8",
+    "operations/jingye_wireless_status.py": "853be303f48de051799a1bac010ffa5d82dbb422b9a8aa04f515b8b17ecc6c84",
+    "operations/Run-JingyeSyncWait.ps1": "321b0fd46add104a3c1fa6371d845bea564a7af29e941a6f19b76e2d3ab9f6cf",
+    "operations/WaitAdapter.Core.ps1": "a7596332ba5ecf926536b73988efe32949f3ef749dbcfe64c115371c124d2aac",
+    "operations/WIRELESS_STATUS.md": "757ba2fd25e8d2de453db82516e3831a6373c98ec8500c475317c5cc634dc473",
+    "tests/run_offline_export.py": "24516ed7a6055319e906fc51f635d59cb5f04fbc192deeaa2cb0f4db3ad4a951",
+    "tests/test_address_report.py": "d6d4717bb447cbc05ee3b18b3f3a757788481b664e4a4d90c7d7789d03158fe4",
+    "tests/test_appium_guard.py": "8e0faf2bbb551f35cdca228830fef54c9d0810cf86dfc984654f3e43bef5861c",
+    "tests/test_jingye_wireless.py": "21ceef81774672d34135ca97e4562f1e1097444d85424d061319d8df0916a45a",
+    "tests/test_jingye_wireless_deadlines.py": "af9c9ed7c6a9b0b2577bc1c0fac597179c4c0ebda03ac7483a9b0fafa49f8b4b",
+    "tests/test_jingye_wireless_status.py": "5de01921f8e2b5ac838382cf7be0a76725629af9cfe5f380709636135e0afc85",
+    "tests/test_wireless_control_errors.py": "35d3b3f2ba6a62e56f084a272eeb46d4452a5d14bfb08e4accc7e2a8a308a6ab",
+    "tests/test_wireless_discovery.py": "99a1d98ae1d4c4a023420a288f6da9215653ac6ee8f9b4805dce261775f3fd36",
+    "android-companion/tests/AddressProtocolTest.java": "097c6a69d60c1d7114327f3d4b1b0f89ceddb8d72ec45eda573a764927eff181",
+    "android-companion/src/com/lj343/jingye/connectionguard/AddressProtocol.java": "0dbb28bcf15f3ec744cff800431b7b530039a0572d1b274a13663b78557c4c48",
+    "android-companion/src/com/lj343/jingye/connectionguard/AddressReporter.java": "21e6fc298cd7a07658a7eb2bdd5fcf4f0c8ce128c69bbeff8e7aac26df5db42f",
+    "android-companion/src/com/lj343/jingye/connectionguard/FailureBoundary.java": "f4b5985713dde2c770ee3fcd1296cd1660949b7d713e0f501eca752a65e4bb96",
+    "android-companion/src/com/lj343/jingye/connectionguard/GuardService.java": "c9061c17104d099fbbc10793615797c8183beb3e458c8bdeea5e4b6a2f5f9d5d",
+    "android-companion/src/com/lj343/jingye/connectionguard/MainActivity.java": "128491b0520bc17ed217571c5fd942f20229903e57be36203490a57ba5f4fb55",
+    "android-companion/src/com/lj343/jingye/connectionguard/RecoveryController.java": "a3ac02c3f06d9ff532445f652dae417a6d4f7cc63525c169640cd2e229753274",
+    "android-companion/src/com/lj343/jingye/connectionguard/ReporterSettings.java": "909c6ddd5ba46fa315a18c5d7b37bbee9213985ce14c14ae6125e9641ee87ed8",
+    "android-companion/src/com/lj343/jingye/connectionguard/StateStore.java": "f52b8f7eb64a3dc7b967bcf6fe73fffb74696d7170d4bd33ed51b2aa998982eb",
+    "android-companion/src/com/lj343/jingye/connectionguard/StatusProvider.java": "e32fedf776260961c578c4a97c9a0a8b5dae4366c4bd091eb49ceb539288e93a",
+    "android-companion/tests/com/lj343/jingye/connectionguard/ExternalWaitReviewTest.java": "ace1e5c000739b4c6e03ff51201ec332cd8c88fbb8a05d37cd94a55f3060bb06",
+    "android-companion/tests/com/lj343/jingye/connectionguard/RecoveryControllerTest.java": "4842c706425b7ae88294e4690535ac98abd0e460556b65f998984f11b91b7823",
+    "workspace/skills/jingye-platform-sync/.env.example": "cd94068d4eb9839e1f4e7116831ba0517fd13010bae8bdd672633ee2ec2f9bd2",
+    "workspace/skills/jingye-platform-sync/.gitignore": "69aa73cf5bc3377a7d97f2e8d2bb773195815efe225af7f1be6f5b9306bbe14f",
+    "workspace/skills/jingye-platform-sync/run_daily_sync.ps1": "dcff65ab14b862fb91bc8f1d354d6469c36cdf58d729f82bb2f29e86f35bd9c6",
+    "workspace/skills/jingye-platform-sync/run_weekly_backfill.ps1": "d2fc9192dfc3306adebbcdce0fbb0d50f7bf91dffa091615882eda42d5fe68c6",
+    "workspace/skills/jingye-platform-sync/SKILL.md": "b82e750fd318334bb0a49f5d5b19a17a615fa2f0dd5962f5f446a84cb3d44960",
+    "workspace/skills/jingye-reconciliation/SKILL.md": "51cb6257b64224a96986dd927b0793ffa263075691233f148c29f61790e2cdfe",
+    "workspace/skills/jingye-platform-sync/agents/openai.yaml": "58044b620231f2afbaff809097a13212fe12231e799bd602348f690b488752bd",
+    "workspace/skills/jingye-platform-sync/references/business-facts.md": "0587ae86a78e6b55c154b4703273227e7151d4bd7276d6123bcec90e67c7c6f6",
+    "workspace/skills/jingye-platform-sync/scripts/jingye_pipeline.py": "1a2ef3290920287715df6230b3d782aa680b391c63ad0b93a24435a72bb05f55",
+    "workspace/skills/jingye-platform-sync/scripts/jingye_store.py": "c3145b1d61d7aba6a498a360716e1c943956b98221bb1abc24141e218ea062df",
+    "workspace/skills/jingye-platform-sync/scripts/jingye_sync.py": "8175369f198b49db56091a4d94fa85720c23c17d2ea68740ac22a2ef4bb22a6c",
+    "workspace/skills/jingye-platform-sync/scripts/jingye_vlm.py": "7ed0a86850139b018410545299f5b824a0af8291f4e264616971747a549b437f",
+    "workspace/skills/jingye-platform-sync/tests/test_freight_instances.py": "0d0eb9492a19166cf1d8bdcf43669f593cad33da423d15fd3bd90a11d96fd34c",
+    "workspace/skills/jingye-platform-sync/tests/test_missing_pdf_recovery.py": "4d1ed62bcc9a6484aac76a060f2ac83675dcb6bb161e745dc7c39d31075bf7f1",
+    "workspace/skills/jingye-platform-sync/tests/test_pipeline_account_email.py": "4be86d1c319ac6e0cad58a43f5749bf8153db885414aaa892cd2650c8203171a",
+    "workspace/skills/jingye-platform-sync/tests/test_pipeline_failure_gate.py": "ab489ca624c2b0dee571428d0aae663b68bbba4a1fa2b4d730ca5b0000441367",
+    "workspace/skills/jingye-platform-sync/tests/test_pipeline_windows.py": "6b84174ec8c3a1197165e1a437bb60b0fd4acf57034f224bb4a301cade59a98e",
+    "workspace/skills/jingye-platform-sync/tests/test_successful_submission_reuse.py": "4e33ac4d59007d8b52387bce9c0eb61019f0e387bbd0af03fec16fb99670a753",
+    "workspace/skills/jingye-reconciliation/scripts/build_reconciliation_snapshot.py": "2e2374af7a094140f219e18fa3edba84bd765b9542f402bcd3cc24fdf0bb293c",
+    "workspace/skills/jingye-reconciliation/scripts/creat_excel.py": "1593632441ff99b42c9d4db0d6c8d411850ce8b969eae670177ea65cc5d3c3bd",
+    "workspace/skills/jingye-reconciliation/scripts/freight_confirmation.py": "35fb9a98bff3b6c82f7a48f5f1b5f381950af3696738ac35bb5ca3b6d97ad23a",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_appium_guard.py": "01b0fb8d56ec5be660d4fb3b79f1639435a0464565d455372c1066fe06533a83",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_appium_ownership.py": "cfb1bfdad0d3bcfedc51f8171d3a514ccb111b2a0e9ced6763cfda6618e83e1c",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_reconcile.py": "c489411d863fd02987b13f3486c49245c13ed49ba1cce7aa80d5a7dd9772a1c6",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_wireless.py": "3ceb99966fa5c4004c7bf7b60aa3602f63260b3c723f6624a0a43d151f11e23c",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_wireless_address.py": "cbf78029c424aacde7c1112271ad3ed9018ca2ad89a36be80a8638aaa7437276",
+    "workspace/skills/jingye-reconciliation/scripts/jingye_wireless_discovery.py": "368302b9e3895c6a477d82e0aed1136e7fedf2074a1ff3ad6b134e49f58fef50",
+    "workspace/skills/jingye-reconciliation/scripts/result_check.py": "bb5294eb7950b85c041fddf6cd590126b24845a8ae2c3d7d80c45b17798e01e8",
+    "workspace/skills/jingye-reconciliation/scripts/yyb_search.py": "0d02b1d5d54561097de0584a0183ec22faafbf9ca6c6fcef9bb69dbf7b891efb",
+    "workspace/skills/jingye-reconciliation/tests/test_creation_capture_recovery.py": "40686d83f58b027ded47dd663fea4cc06313a0635a02a1b9d19822b4c25a19eb",
+    "workspace/skills/jingye-reconciliation/tests/test_freight_matching.py": "52577f32fd91eb093847350be7af8807a34f048e618557a49f4cbf6227f8488c",
+    "workspace/skills/jingye-reconciliation/tests/test_pdf_long_paths.py": "ae261e8f687c5d7b1af6330c9860859987a8730c9368e3f36c7064bb607b4a75",
+    "workspace/skills/jingye-reconciliation/tests/test_pdf_transfer_integrity.py": "5047715ae60cfad0f1d25dfe9f799999446ace3f58a66a8f5100eb5a4f59d1f5",
+    "workspace/skills/jingye-reconciliation/tests/test_phone_process_ownership.py": "4658db427132ef16eb49303861df707fb91e1e3b37678c079d0d6a5ad3d99a3b",
+    "workspace/skills/jingye-reconciliation/tests/test_ui_interruption_pause.py": "7cadffed8b3fc7fc22541d3752f1855165ed4cbb00f35f981a8f324e6abead36",
+    "workspace/skills/jingye-reconciliation/tests/test_wireless_session_ownership.py": "660dfc41562ad1ba36a551bbe65ebea4514f6b0018455ae4f5c3a21d1caa6b72",
+    "workspace/skills/jingye-reconciliation/tests/test_yyb_download_recovery.py": "189561917c09b247a783970e471922ec269136de2509b8682aa5b0f7e1952d30",
+    "docs/ADDRESS_REPORT_VALIDATION.json": "b214ca82652a3d85f6f0923f52729f0606f165dc95d7164202a88079341c4f34"
+  },
+  "transformed_sources": {
+    "workspace/skills/jingye-reconciliation/scripts/jingye_wireless.py": {
+      "source_sha256": "bcf58c7b045429c428b78e61d8f61f03ca39b79a5ea12f4d974a5dc46a982e97",
+      "export_sha256": "3ceb99966fa5c4004c7bf7b60aa3602f63260b3c723f6624a0a43d151f11e23c",
+      "byte_identical": false
+    },
+    "workspace/skills/jingye-reconciliation/scripts/jingye_wireless_address.py": {
+      "source_sha256": "cbf78029c424aacde7c1112271ad3ed9018ca2ad89a36be80a8638aaa7437276",
+      "export_sha256": "cbf78029c424aacde7c1112271ad3ed9018ca2ad89a36be80a8638aaa7437276",
+      "byte_identical": true
+    },
+    "operations/jingye_wireless_status.py": {
+      "source_sha256": "853be303f48de051799a1bac010ffa5d82dbb422b9a8aa04f515b8b17ecc6c84",
+      "export_sha256": "853be303f48de051799a1bac010ffa5d82dbb422b9a8aa04f515b8b17ecc6c84",
+      "byte_identical": true
+    },
+    "tests/test_address_report.py": {
+      "source_sha256": "8e2e585e8684e695475488a8210134609528343e3ce574296f001801f8a25ee0",
+      "export_sha256": "d6d4717bb447cbc05ee3b18b3f3a757788481b664e4a4d90c7d7789d03158fe4",
+      "byte_identical": false
+    },
+    "tests/test_jingye_wireless.py": {
+      "source_sha256": "078d452df9a8ee99b651e9b772029f0a7ca7340ffeed14c3c15aaec1cac797fd",
+      "export_sha256": "21ceef81774672d34135ca97e4562f1e1097444d85424d061319d8df0916a45a",
+      "byte_identical": false
+    },
+    "tests/test_jingye_wireless_deadlines.py": {
+      "source_sha256": "d15db7e511145729c379171b0d2611381f93254dc355c0f5d377d160545373cc",
+      "export_sha256": "af9c9ed7c6a9b0b2577bc1c0fac597179c4c0ebda03ac7483a9b0fafa49f8b4b",
+      "byte_identical": false
+    },
+    "tests/test_jingye_wireless_status.py": {
+      "source_sha256": "5762c035207ecd07b5745ecf82177d10dd9e6ba62036c41e89d79d139bdbf3b2",
+      "export_sha256": "5de01921f8e2b5ac838382cf7be0a76725629af9cfe5f380709636135e0afc85",
+      "byte_identical": false
+    },
+    "tests/test_wireless_control_errors.py": {
+      "source_sha256": "803e2174ca0e4d76c16041a23ce259b68b1093fe9dfe860cbbbed3afb3124bf5",
+      "export_sha256": "35d3b3f2ba6a62e56f084a272eeb46d4452a5d14bfb08e4accc7e2a8a308a6ab",
+      "byte_identical": false
+    },
+    "tests/test_wireless_discovery.py": {
+      "source_sha256": "fdf71714ad70aa3a87d31b4f99c14d76ceb99d16ed9de71a1e59a8dbda0b3dca",
+      "export_sha256": "99a1d98ae1d4c4a023420a288f6da9215653ac6ee8f9b4805dce261775f3fd36",
+      "byte_identical": false
+    },
+    "android-companion/AndroidManifest.xml": {
+      "source_sha256": "ee9aa1e1622d6cba13841484f5494c3abca9d042a6c7125a11186832adc2da53",
+      "export_sha256": "ee9aa1e1622d6cba13841484f5494c3abca9d042a6c7125a11186832adc2da53",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/AddressProtocol.java": {
+      "source_sha256": "0dbb28bcf15f3ec744cff800431b7b530039a0572d1b274a13663b78557c4c48",
+      "export_sha256": "0dbb28bcf15f3ec744cff800431b7b530039a0572d1b274a13663b78557c4c48",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/AddressReporter.java": {
+      "source_sha256": "21e6fc298cd7a07658a7eb2bdd5fcf4f0c8ce128c69bbeff8e7aac26df5db42f",
+      "export_sha256": "21e6fc298cd7a07658a7eb2bdd5fcf4f0c8ce128c69bbeff8e7aac26df5db42f",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/FailureBoundary.java": {
+      "source_sha256": "f4b5985713dde2c770ee3fcd1296cd1660949b7d713e0f501eca752a65e4bb96",
+      "export_sha256": "f4b5985713dde2c770ee3fcd1296cd1660949b7d713e0f501eca752a65e4bb96",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/GuardService.java": {
+      "source_sha256": "c9061c17104d099fbbc10793615797c8183beb3e458c8bdeea5e4b6a2f5f9d5d",
+      "export_sha256": "c9061c17104d099fbbc10793615797c8183beb3e458c8bdeea5e4b6a2f5f9d5d",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/MainActivity.java": {
+      "source_sha256": "128491b0520bc17ed217571c5fd942f20229903e57be36203490a57ba5f4fb55",
+      "export_sha256": "128491b0520bc17ed217571c5fd942f20229903e57be36203490a57ba5f4fb55",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/RecoveryController.java": {
+      "source_sha256": "a3ac02c3f06d9ff532445f652dae417a6d4f7cc63525c169640cd2e229753274",
+      "export_sha256": "a3ac02c3f06d9ff532445f652dae417a6d4f7cc63525c169640cd2e229753274",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/ReporterSettings.java": {
+      "source_sha256": "909c6ddd5ba46fa315a18c5d7b37bbee9213985ce14c14ae6125e9641ee87ed8",
+      "export_sha256": "909c6ddd5ba46fa315a18c5d7b37bbee9213985ce14c14ae6125e9641ee87ed8",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/StateStore.java": {
+      "source_sha256": "f52b8f7eb64a3dc7b967bcf6fe73fffb74696d7170d4bd33ed51b2aa998982eb",
+      "export_sha256": "f52b8f7eb64a3dc7b967bcf6fe73fffb74696d7170d4bd33ed51b2aa998982eb",
+      "byte_identical": true
+    },
+    "android-companion/src/com/lj343/jingye/connectionguard/StatusProvider.java": {
+      "source_sha256": "e32fedf776260961c578c4a97c9a0a8b5dae4366c4bd091eb49ceb539288e93a",
+      "export_sha256": "e32fedf776260961c578c4a97c9a0a8b5dae4366c4bd091eb49ceb539288e93a",
+      "byte_identical": true
+    },
+    "android-companion/tests/com/lj343/jingye/connectionguard/RecoveryControllerTest.java": {
+      "source_sha256": "4842c706425b7ae88294e4690535ac98abd0e460556b65f998984f11b91b7823",
+      "export_sha256": "4842c706425b7ae88294e4690535ac98abd0e460556b65f998984f11b91b7823",
+      "byte_identical": true
+    },
+    "android-companion/build-companion.ps1": {
+      "source_sha256": "31d625fe695eaffc19365352c1b4aca80b48a4dc953118e2f91f8dcf61d44aae",
+      "export_sha256": "270845fe5eb90da3e30b5caefdd82270f228bf6cdf389e22b1ff4065b3c94740",
+      "byte_identical": false
+    },
+    "android-companion/build-unsigned.ps1": {
+      "source_sha256": "6d0429911cfe690b71d9749e32581417367788ab48f00a4b0f1e3021d11b2cc4",
+      "export_sha256": "f4b05f4b621ae923ee8ac3414548b5fd217153a65478f29a203d70028ae5435d",
+      "byte_identical": false
+    },
+    "android-companion/build_companion.py": {
+      "source_sha256": "01f736138fbf1b0bbe091a78668c331be83d6d86a9ef1011219877713724baec",
+      "export_sha256": "2a2f6b01fe304e4db373a13accf95093f8656a0fb215a123babcbeefba483954",
+      "byte_identical": false
+    },
+    "android-companion/test-offline.ps1": {
+      "source_sha256": "1cc5688d036ad8e559c2e6ae7b17a2125788927704c8352658f3a70d2d24b2dd",
+      "export_sha256": "1cc5688d036ad8e559c2e6ae7b17a2125788927704c8352658f3a70d2d24b2dd",
+      "byte_identical": true
+    },
+    "android-companion/tests/AddressProtocolTest.java": {
+      "source_sha256": "c2ea01e17d3c269412292299019d8fdb2a90c68a2fb592649f923d1c0e32263b",
+      "export_sha256": "097c6a69d60c1d7114327f3d4b1b0f89ceddb8d72ec45eda573a764927eff181",
+      "byte_identical": false
+    },
+    "android-companion/tests/com/lj343/jingye/connectionguard/ExternalWaitReviewTest.java": {
+      "source_sha256": "ace1e5c000739b4c6e03ff51201ec332cd8c88fbb8a05d37cd94a55f3060bb06",
+      "export_sha256": "ace1e5c000739b4c6e03ff51201ec332cd8c88fbb8a05d37cd94a55f3060bb06",
+      "byte_identical": true
+    },
+    "operations/Jingye-Wireless-Status.cmd": {
+      "source_sha256": "8d1e6bb472782e4093e1afe3333222bbd72eab7b3e6bce5207a3d85e19e36c4b",
+      "export_sha256": "855def2bc2137f2446f670b87a7cfe89c03351f3ffb6c97f139fd12948f80b09",
+      "byte_identical": false
+    },
+    "operations/Jingye-Wireless-Watch.cmd": {
+      "source_sha256": "022916222a2c1a94a845fce84693e581ce96bcfdff221736c774265cbe5e116c",
+      "export_sha256": "1095a806e956888a41d4a9bb32545c115bf21b71fe873b11aec8dc3a488042b8",
+      "byte_identical": false
+    }
+  },
+  "metadata_self_excluded": [
+    "docs/address-report-export-manifest.json"
+  ],
+  "apk_in_source": false,
+  "private_configuration_included": false,
+  "exported_offline_validation": "docs/ADDRESS_REPORT_VALIDATION.json"
+}

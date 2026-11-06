@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
-        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 0.2 审阅测试版"); title.setTextSize(23); layout.addView(title);
+        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 0.3 审阅测试版"); title.setTextSize(23); layout.addView(title);
         TextView explanation = new TextView(this);
         explanation.setText("默认不启用。只有您点击开始后，助手才会尝试恢复无线调试。\n\n"
                 + "启用期间，系统关闭无线调试后可能被恢复；要手动保持关闭，请先暂停并停止助手。"
@@ -38,7 +38,9 @@ public final class MainActivity extends Activity {
                 + "按系统时间计十分钟达到三次恢复，或权限/系统接口失败，会暂停，须您主动恢复。"
                 + "每次恢复最多持有 25 秒唤醒锁。\n\n"
                 + "需要另行批准 WRITE_SECURE_SETTINGS 开发权限；本应用不会自行授予。"
-                + "不开机自启，系统仍可能结束后台进程，不能保证永久在线。\n");
+                + "不开机自启，系统仍可能结束后台进程，不能保证永久在线。\n\n"
+                + "地址上报须单独配置。配置后，仅在助手启用且无线调试开启时，每 15 秒向指定电脑发送一次本机 Wi-Fi 地址认证报文；"
+                + "不上传业务资料。电脑仅在等待连接时接收；收到地址后仍需发现端口并核验手机身份。地址上报不代表电脑已连接。\n");
         layout.addView(explanation);
         addButton(layout, "开始 / 恢复一次", v -> requestStart());
         addButton(layout, "暂停并停止助手", v -> FailureBoundary.run(() -> {
@@ -87,7 +89,10 @@ public final class MainActivity extends Activity {
         String snapshot = store.snapshot();
         String code = "USER_STOPPED";
         try { code = new JSONObject(snapshot).optString("code", code); } catch (Exception ignored) { }
+        String reporting = "地址上报配置未确认";
+        try { reporting = ReporterSettings.load(this) == null ? "地址上报尚未配置" : "地址上报已配置；电脑连接仍需单独核验"; }
+        catch (RuntimeException ignored) { }
         return GuardService.statusText(code) + "\n\n以下为最近上报，系统强制结束后可能过时；不代表电脑已连接。\n"
-                + snapshot + "\n\n最近状态（最多 40 条）\n" + store.history();
+                + snapshot + "\n\n" + reporting + "\n\n最近状态（最多 40 条）\n" + store.history();
     }
 }

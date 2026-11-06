@@ -1,6 +1,6 @@
-# Wireless recovery repair 0.2-review
+# Wireless recovery 0.3-review
 
-The two runtime repairs were deployed after the controlled live acceptance passed. See [wireless repair evidence and limits](docs/WIRELESS_RELEASE.md). The matching APK and verification files are distributed through the repository Release. The preserved USB baseline description below remains historical context.
+Authenticated phone-address reporting and on-demand connection recovery are deployed. See [0.3 release and acceptance limits](docs/WIRELESS_RELEASE_0.3.md), [companion setup](android-companion/ADDRESS_REPORT.md), and [wireless status](operations/WIRELESS_STATUS.md). The USB description below is historical; `main` remains the USB baseline. APK and checksum files are distributed through the separate 0.3 Release.
 
 # 敬业 Appium 自动化
 

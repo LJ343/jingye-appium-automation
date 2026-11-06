@@ -7,8 +7,7 @@ from unittest.mock import patch
 from test_wireless_discovery import Clock, Network, discovery, HOST
 
 
-SOURCE = (Path(__file__).resolve().parents[1] / "workspace" / "skills" /
-          "jingye-reconciliation" / "scripts" / "jingye_wireless.py")
+SOURCE = (Path(__file__).resolve().parents[1] / "workspace/skills/jingye-reconciliation/scripts" / "jingye_wireless.py")
 SPEC = importlib.util.spec_from_file_location("wireless_control_error_class", SOURCE)
 wireless = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(wireless)
