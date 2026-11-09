@@ -68,7 +68,7 @@ public final class GuardService extends Service implements RecoveryController.Po
                     if (original == work && wrapped != null) handler.removeCallbacks(wrapped);
                     original = null; wrapped = null;
                 }
-            }, store.attempts(), store.recentAttempts());
+            }, store.attempts(), store.recentAttempts(), store.autoRetriesUsed(), store.retryNotBeforeMs());
             getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(
                     CHANNEL, "连接恢复状态", NotificationManager.IMPORTANCE_LOW));
         });
@@ -196,7 +196,11 @@ public final class GuardService extends Service implements RecoveryController.Po
     static String statusText(String code) {
         switch (code) {
             case "WAIT_WIFI": return "等待 Wi-Fi；网络恢复后再尝试";
-            case "WAIT_STABLE_WIFI": return "等待网络稳定，仅恢复一次";
+            case "WAIT_STABLE_WIFI": return "等待网络稳定后恢复无线调试";
+            case "WAIT_RETRY": return "本次恢复未保持；正在退避，稍后有限重试";
+            case "WAIT_STABLE_RETRY": return "重试前核对网络稳定，不会重置限频";
+            case "WAIT_RETRY_WIFI": return "等待 Wi-Fi；保留原重试计划与预算";
+            case "RETRY_EXHAUSTED": return "本轮三次均未保持；已停止写入，请处理系统确认或人工恢复";
             case "VERIFY_SWITCH_ONLY": return "已尝试恢复，正在观察系统开关";
             case "SWITCH_ON_PC_UNVERIFIED": return "系统开关已开启，电脑连接待验证";
             case "SYSTEM_DID_NOT_KEEP_ON": return "旧版系统复位暂停；需手动重新开始，不自动批准网络";

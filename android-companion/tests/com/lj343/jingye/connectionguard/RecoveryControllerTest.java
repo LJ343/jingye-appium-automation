@@ -3,251 +3,225 @@ package com.lj343.jingye.connectionguard;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Deterministic adversarial event tests; uses the production policy, no Android runtime. */
+/** Adversarial event/clock/recreation tests of the actual policy, no Android or network. */
 public final class RecoveryControllerTest {
     private static int tests;
     private static final class Rig implements RecoveryController.Port, RecoveryController.Scheduler {
-        boolean wifi = true, permission = true, acceptWrite = true, latchWrite = true;
-        boolean throwWrite, throwRelease, nextReadOff;
-        int flag, writes, maxPending;
-        boolean wake;
-        long now, due;
+        boolean wifi=true, permission=true, accept=true, latch=true, wake, throwWrite, nextReadOff;
+        int flag, writes, failSaveAtAttempt=-1;
+        long elapsed, wallBase=1_000_000, due;
         Runnable queued;
-        final List<Runnable> captured = new ArrayList<>();
-        final List<RecoveryController.Snapshot> states = new ArrayList<>();
+        RecoveryController.Snapshot last;
+        final List<Runnable> captured=new ArrayList<>();
         final RecoveryController c;
-        Rig() { this(0, new long[0]); }
-        Rig(long attempts, long[] times) { c = new RecoveryController(this, this, attempts, times); }
-        public boolean wifiAvailable() { return wifi; }
-        public int readEnabled() { if (nextReadOff) { nextReadOff = false; return 0; } return flag; }
-        public boolean canWrite() { return permission; }
-        public long nowMillis() { return now; }
-        public boolean enableOnce() {
-            writes++; if (throwWrite) throw new IllegalStateException("TEST_PLATFORM_FAILURE");
-            if (acceptWrite && latchWrite) flag = 1; return acceptWrite;
+        Rig(){this(0,new long[0],0,0);}
+        Rig(long attempts,long[] times,int used,long next){c=new RecoveryController(this,this,attempts,times,used,next);}
+        public boolean wifiAvailable(){return wifi;}
+        public int readEnabled(){if(nextReadOff){nextReadOff=false;return 0;}return flag;}
+        public boolean canWrite(){return permission;}
+        public long nowMillis(){return wallBase+elapsed;}
+        public boolean enableOnce(){
+            check(last!=null && last.attemptConsumed && last.attempts==c.getState().attempts,"budget persisted before write");
+            writes++;if(throwWrite)throw new IllegalStateException("SYNTHETIC_WRITE_FAULT");
+            if(accept && latch)flag=1;return accept;
         }
-        public void holdWake(long ms) { check(ms <= 30_000, "bounded wake"); wake = true; }
-        public void releaseWake() { if (throwRelease) throw new IllegalStateException("TEST_RELEASE_FAILURE"); wake = false; }
-        public void changed(RecoveryController.Snapshot s) { states.add(s); }
-        public void schedule(Runnable work, long delay) {
-            check(queued == null, "only one pending task"); queued = work; due = now + delay;
-            captured.add(work); maxPending = 1;
+        public void holdWake(long ms){check(ms<=25_000,"bounded wake");wake=true;}
+        public void releaseWake(){wake=false;}
+        public void changed(RecoveryController.Snapshot s){
+            if(s.attempts==failSaveAtAttempt)throw new IllegalStateException("SYNTHETIC_PERSIST_FAULT");
+            last=s;
         }
-        public void cancel(Runnable work) { if (queued == work) queued = null; }
-        void advance(long ms) {
-            long target = now + ms;
-            while (queued != null && due <= target) {
-                Runnable r = queued; queued = null; now = due; r.run();
-            }
-            now = target;
-        }
-        void set(int value) { flag = value; c.settingChanged(); }
-        void net(boolean value) { wifi = value; c.networkChanged(value); }
+        public void schedule(Runnable task,long delay){check(queued==null,"at most one timer");check(delay>=0,"nonnegative delay");queued=task;due=elapsed+delay;captured.add(task);}
+        public void cancel(Runnable task){if(queued==task)queued=null;}
+        void advance(long ms){long end=elapsed+ms;int calls=0;while(queued!=null && due<=end){check(++calls<200,"no timer spin");Runnable task=queued;queued=null;elapsed=due;task.run();}elapsed=end;}
+        void set(int value){flag=value;c.settingChanged();}
+        void net(boolean value){wifi=value;c.networkChanged(value);}
+        void earlyReset(){c.start(false);advance(4_000);set(0);}
+        Rig recreate(){RecoveryController.Snapshot s=c.getState();c.dispose();Rig r=new Rig(s.attempts,s.recentAttempts,s.autoRetriesUsed,s.retryNotBeforeMs);r.wallBase=nowMillis();r.flag=flag;r.wifi=wifi;r.permission=permission;r.latch=latch;r.c.start(s.attemptConsumed);return r;}
     }
-    private static void check(boolean ok, String text) { if (!ok) throw new AssertionError(text); }
-    private static void phase(Rig r, String expected) { check(expected.equals(r.c.getState().phase), expected + " phase"); }
-    private static void test(String name, Runnable work) { work.run(); tests++; System.out.println("PASS " + name); }
-
-    public static void main(String[] args) {
-        test("default inert and unsolicited events cannot write", () -> {
-            Rig r = new Rig(); r.set(0); r.net(true); r.advance(100_000);
-            check(r.writes == 0 && !r.wake, "default inert"); phase(r, "STOPPED");
+    private static void check(boolean ok,String why){if(!ok)throw new AssertionError(why);}
+    private static void phase(Rig r,String p){check(p.equals(r.c.getState().phase),"expected "+p+", got "+r.c.getState().phase);}
+    private static void test(String name,Runnable action){action.run();tests++;System.out.println("PASS "+name);}
+    public static void main(String[] args){
+        test("default and unsolicited callbacks cannot write",()->{
+            Rig r=new Rig();for(int i=0;i<100;i++){r.set(0);r.net(true);}r.advance(86_400_000);
+            phase(r,"STOPPED");check(r.writes==0 && r.queued==null && !r.wake,"inert");
         });
-        test("explicit start waits four seconds and verifies twelve seconds", () -> {
-            Rig r = new Rig(); r.c.start(false); phase(r, "STABILIZING");
-            r.advance(3_999); check(r.writes == 0, "no early write");
-            r.advance(1); check(r.writes == 1 && r.wake, "one write"); phase(r, "VERIFYING");
-            r.advance(11_999); phase(r, "VERIFYING"); r.advance(1);
-            phase(r, "COOLDOWN"); check(!r.wake, "release after verify");
-            r.advance(18_000); phase(r, "OPEN_PENDING_PC"); check(r.queued == null, "rearm after stable thirty seconds");
+        test("healthy already-on operation never schedules recovery",()->{
+            Rig r=new Rig();r.flag=1;r.c.start(false);for(int i=0;i<100;i++){r.set(1);r.net(true);}r.advance(86_400_000);
+            phase(r,"OPEN_PENDING_PC");check(r.writes==0 && r.queued==null && !r.wake,"healthy quiet");
         });
-        test("stop invalidates even an already dispatched old callback", () -> {
-            Rig r = new Rig(); r.c.start(false); Runnable stale = r.queued; r.c.stop(); stale.run(); r.advance(100_000);
-            check(r.writes == 0 && !r.wake && r.queued == null, "stop cancels writes"); phase(r, "STOPPED");
+        test("initial four-second stabilization and full verification retained",()->{
+            Rig r=new Rig();r.c.start(false);r.advance(3_999);check(r.writes==0,"not early");r.advance(1);
+            phase(r,"VERIFYING");r.advance(12_000);phase(r,"COOLDOWN");check(!r.wake,"verification releases wake");
+            r.advance(17_999);check(r.c.getState().attemptConsumed,"not rearmed early");r.advance(1);phase(r,"OPEN_PENDING_PC");
         });
-        test("rearm cannot execute stale generation", () -> {
-            Rig r = new Rig(); r.c.start(false); Runnable stale = r.queued; r.c.stop(); r.c.start(false);
-            stale.run(); check(r.writes == 0, "old arm invalid"); r.advance(4_000); check(r.writes == 1, "new arm only");
+        test("morning immediate reset recovers automatically after sixty seconds",()->{
+            Rig r=new Rig();r.earlyReset();phase(r,"RETRY_WAIT");check(!r.wake && r.c.getState().timerPending,"quiet bounded retry planned");
+            r.advance(59_999);check(r.writes==1,"no early retry");r.advance(1);phase(r,"RETRY_STABILIZING");
+            r.advance(3_999);check(r.writes==1,"retry restabilizes");r.advance(1);check(r.writes==2 && r.c.getState().autoRetriesUsed==1,"second attempt");
+            r.advance(30_000);phase(r,"OPEN_PENDING_PC");check(!r.c.getState().attemptConsumed && r.c.getState().autoRetriesUsed==0,"verified recovery resets episode");
         });
-        test("network loss during stabilization waits and restabilizes", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(2_000); r.net(false);
-            r.advance(50_000); phase(r, "WAIT_WIFI"); check(r.writes == 0 && !r.wake, "offline quiet");
-            r.net(true); r.advance(3_999); check(r.writes == 0, "restabilize"); r.advance(1); check(r.writes == 1, "return attempt");
+        test("never-latching setting gets two backed-off retries then explicit exhaustion",()->{
+            Rig r=new Rig();r.latch=false;r.c.start(false);r.advance(16_000);phase(r,"RETRY_WAIT");
+            r.advance(63_999);check(r.writes==1,"first retry not early");r.advance(1);check(r.writes==2,"first retry due");
+            r.advance(12_000);phase(r,"RETRY_WAIT");r.advance(123_999);check(r.writes==2,"second backoff retained");r.advance(1);check(r.writes==3,"last allowed retry");
+            r.advance(12_000);phase(r,"WAIT_EXTERNAL_ON");check("RETRY_EXHAUSTED".equals(r.c.getState().code),"visible reason");
+            r.advance(86_400_000);check(r.writes==3 && r.queued==null && !r.wake,"no unlimited loop after expiry");
         });
-        test("Wi-Fi loss at write deadline is rechecked", () -> {
-            Rig r = new Rig(); r.c.start(false); r.wifi = false; r.advance(4_000);
-            check(r.writes == 0 && !r.wake, "deadline reads network"); phase(r, "WAIT_WIFI");
+        test("third attempt may recover inside the existing five-minute task budget",()->{
+            Rig r=new Rig();r.latch=false;r.c.start(false);r.advance(92_000);check(r.writes==2,"two failed attempts");
+            r.latch=true;r.advance(154_000);phase(r,"OPEN_PENDING_PC");check(r.writes==3 && r.elapsed<300_000,"third recovery within 300s");
         });
-        test("framework immediate reset stays read only and never loops", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(4_000); r.set(0); phase(r, "WAIT_EXTERNAL_ON");
-            for (int i = 0; i < 100; i++) { r.set(0); r.net(false); r.net(true); r.advance(20_000); }
-            check(r.writes == 1 && !r.wake && r.queued == null && r.c.getState().armed
-                    && r.c.getState().attemptConsumed, "no rejection loop or replenished budget");
+        test("duplicate OFF and network callbacks neither replenish nor postpone retries",()->{
+            Rig r=new Rig();r.earlyReset();long at=r.c.getState().retryNotBeforeMs;Runnable timer=r.queued;
+            for(int i=0;i<59;i++){r.advance(1_000);r.set(0);r.net(true);}
+            check(r.queued==timer && r.c.getState().retryNotBeforeMs==at,"same original deadline");
+            r.advance(1_000);for(int i=0;i<100;i++){r.set(0);r.net(true);}r.advance(4_000);check(r.writes==2,"one retry only");
         });
-        test("a write that never latches waits read only at deadline", () -> {
-            Rig r = new Rig(); r.latchWrite = false; r.c.start(false); r.advance(16_000);
-            phase(r, "WAIT_EXTERNAL_ON"); check(r.writes == 1 && !r.wake, "bounded failed write");
+        test("ordinary network loss before writing waits for a new stable window",()->{
+            Rig r=new Rig();r.c.start(false);r.advance(2_000);r.net(false);r.advance(100_000);check(r.writes==0 && !r.wake,"offline quiet");
+            r.net(true);r.advance(3_999);check(r.writes==0,"full stability");r.advance(1);check(r.writes==1,"one write after return");
         });
-        test("setting failure and permission revocation cannot repeat", () -> {
-            Rig rejected = new Rig(); rejected.acceptWrite = false; rejected.c.start(false); rejected.advance(4_000);
-            phase(rejected, "PAUSED"); check(rejected.writes == 1, "one rejected write");
-            Rig revoked = new Rig(); revoked.c.start(false); revoked.permission = false; revoked.advance(4_000);
-            phase(revoked, "PAUSED"); check(revoked.writes == 0, "permission rechecked");
+        test("network loss during verification cannot create a fresh episode budget",()->{
+            Rig r=new Rig();r.c.start(false);r.advance(4_000);r.flag=0;r.net(false);long at=r.c.getState().retryNotBeforeMs;
+            r.advance(80_000);check(r.writes==1 && !r.wake,"no Wi-Fi no writes");r.net(true);r.advance(4_000);
+            check(r.writes==2 && r.c.getState().autoRetriesUsed==1 && at>0,"same episode on return");
         });
-        test("already-on start and later independent same-handle episodes", () -> {
-            Rig r = new Rig(); r.flag = 1; r.c.start(false); phase(r, "OPEN_PENDING_PC");
-            check(r.writes == 0 && !r.wake, "on stays read only"); r.set(0); r.advance(34_000);
-            check(r.writes == 1, "observer recovery"); phase(r, "OPEN_PENDING_PC");
-            r.set(0); r.advance(34_000); phase(r, "OPEN_PENDING_PC"); check(r.writes == 2, "second independent episode allowed");
+        test("repeated Wi-Fi loss cannot reset or exhaust the pending budget",()->{
+            Rig r=new Rig();r.earlyReset();long at=r.c.getState().retryNotBeforeMs;
+            for(int i=0;i<20;i++){r.net(false);r.advance(100);r.net(true);r.advance(100);}
+            check(r.writes==1 && r.c.getState().autoRetriesUsed==0 && r.c.getState().retryNotBeforeMs==at,"budget unchanged");
+            r.advance(60_000);check(r.writes==2,"retry not stranded");
         });
-        test("reset during thirty-second cooldown waits read only", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(16_000); phase(r, "COOLDOWN");
-            r.set(0); r.advance(100_000); phase(r, "WAIT_EXTERNAL_ON"); check(r.writes == 1, "early second off cannot write again");
+        test("retry write deadline rechecks actual Wi-Fi availability",()->{
+            Rig r=new Rig();r.earlyReset();r.advance(60_000);r.wifi=false;r.advance(4_000);
+            phase(r,"WAIT_WIFI_RETRY");check(r.writes==1 && !r.wake,"deadline fail closed");r.net(true);r.advance(4_000);check(r.writes==2,"return recovers");
         });
-        test("manual resume explicitly replenishes attempt", () -> {
-            Rig r = new Rig(); r.latchWrite = false; r.c.start(false); r.advance(16_000); phase(r, "WAIT_EXTERNAL_ON");
-            r.latchWrite = true; r.c.start(false); r.advance(34_000); check(r.writes == 2, "explicit second attempt"); phase(r, "OPEN_PENDING_PC");
+        test("external ON before retry cancels writing and requires thirty stable seconds",()->{
+            Rig r=new Rig();r.earlyReset();r.advance(10_000);r.set(1);phase(r,"EXTERNAL_ON_STABILIZING");
+            r.advance(29_999);check(r.c.getState().attemptConsumed && r.writes==1,"no early rearm");r.advance(1);
+            phase(r,"OPEN_PENDING_PC");r.advance(100_000);check(r.writes==1 && r.queued==null,"cancelled retry stays cancelled");
         });
-        test("sticky recreation keeps consumed attempt budget", () -> {
-            Rig r = new Rig(); r.c.start(true); r.advance(100_000);
-            phase(r, "WAIT_EXTERNAL_ON"); check(r.writes == 0, "restored consumed budget cannot write");
+        test("external OFF then ON resets only the stability timer",()->{
+            Rig r=new Rig();r.earlyReset();long at=r.c.getState().retryNotBeforeMs;r.set(1);r.advance(20_000);r.set(0);
+            check(r.c.getState().retryNotBeforeMs==at,"backoff not extended");r.set(1);r.advance(29_999);check(r.c.getState().attemptConsumed,"new complete stable interval");
+            r.advance(1);phase(r,"OPEN_PENDING_PC");check(r.writes==1,"no extra write");
         });
-        test("network loss after successful recovery creates a new episode", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(34_000); r.net(false); r.set(0); r.net(true); r.advance(34_000);
-            check(r.writes == 2, "one per real network return"); phase(r, "OPEN_PENDING_PC");
+        test("observed OFF cannot be erased by a subsequent ON read",()->{
+            Rig r=new Rig();r.flag=1;r.c.start(true);r.advance(29_999);r.nextReadOff=true;r.c.settingChanged();
+            check(!"EXTERNAL_ON_STABILIZING".equals(r.c.getState().phase),"observed off cancels old stable interval");
+            r.c.settingChanged();r.advance(29_999);check(r.c.getState().attemptConsumed,"fresh interval");r.advance(1);check(r.writes==0,"no unnecessary write");
         });
-        test("duplicate available and observer callbacks never multiply timers", () -> {
-            Rig r = new Rig(); r.c.start(false);
-            for (int i = 0; i < 100; i++) { r.net(true); r.set(0); }
-            r.advance(4_000); for (int i = 0; i < 100; i++) { r.net(true); r.set(1); }
-            r.advance(12_000); check(r.writes == 1 && r.maxPending == 1, "single pending timer");
+        test("OFF then ON at stability deadline does not leave a timerless phase",()->{
+            Rig r=new Rig();r.flag=1;r.c.start(true);r.nextReadOff=true;r.advance(30_000);
+            phase(r,"EXTERNAL_ON_STABILIZING");check(r.queued!=null,"fresh timer exists");r.advance(30_000);phase(r,"OPEN_PENDING_PC");
         });
-        test("stop during verify releases wake and never resumes", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(4_000); Runnable stale = r.queued;
-            r.c.stop(); stale.run(); r.set(0); r.advance(100_000);
-            check(r.writes == 1 && !r.wake && r.queued == null, "stop during verify");
+        test("duplicate external ON does not postpone stable recovery",()->{
+            Rig r=new Rig();r.flag=1;r.c.start(true);Runnable timer=r.queued;
+            for(int i=0;i<29;i++){r.advance(1_000);r.set(1);r.net(true);}check(r.queued==timer,"one stability timer");r.advance(1_000);phase(r,"OPEN_PENDING_PC");
         });
-        test("external enable during stabilization cancels the write", () -> {
-            Rig r = new Rig(); r.c.start(false); r.set(1); r.advance(100_000);
-            check(r.writes == 0 && !r.wake, "external enable honored"); phase(r, "OPEN_PENDING_PC");
+        test("network OFF observation cancels stability despite an already restored read",()->{
+            Rig r=new Rig();r.flag=1;r.c.start(true);r.advance(29_999);r.c.networkChanged(false);
+            phase(r,"WAIT_WIFI_RETRY");r.c.networkChanged(true);r.advance(29_999);check(r.c.getState().attemptConsumed,"new full interval");r.advance(1);phase(r,"OPEN_PENDING_PC");
         });
-        test("three attempts in ten minutes trips a persistent rate circuit", () -> {
-            Rig r = new Rig();
-            for (int i = 0; i < 3; i++) { r.flag = 0; r.c.start(false); r.advance(34_000); }
-            r.set(0); r.advance(4_000); phase(r, "PAUSED");
-            check(r.writes == 3 && "RATE_LIMITED".equals(r.c.getState().code), "fourth write blocked");
-            r.c.start(false); r.advance(4_000); check(r.writes == 3, "manual resume cannot bypass rate limit");
-            RecoveryController.Snapshot snapshot = r.c.getState();
-            Rig restored = new Rig(snapshot.attempts, snapshot.recentAttempts); restored.now = r.now;
-            restored.c.start(false); restored.advance(4_000); check(restored.writes == 0, "recreation cannot bypass rate limit");
-            restored.advance(RecoveryController.RATE_WINDOW_MS); restored.c.start(false); restored.advance(34_000);
-            check(restored.writes == 1, "expired window permits explicit recovery");
+        test("consumed-on service recreation remains read-only during stability",()->{
+            Rig r=new Rig(7,new long[]{999_000},1,1_060_000);r.flag=1;r.c.start(true);r.advance(29_999);check(r.writes==0 && r.c.getState().attemptConsumed,"not early");
+            r.advance(1);phase(r,"OPEN_PENDING_PC");check(r.c.getState().autoRetriesUsed==0 && r.c.getState().retryNotBeforeMs==0,"episode clears after stability");
         });
-        test("sticky recreation of consumed-on state rechecks thirty-second stability", () -> {
-            Rig r = new Rig(); r.flag = 1; r.c.start(true); phase(r, "EXTERNAL_ON_STABILIZING");
-            r.advance(29_999); check(r.c.getState().attemptConsumed, "not rearmed early");
-            r.advance(1); phase(r, "OPEN_PENDING_PC"); check(!r.c.getState().attemptConsumed && r.writes == 0, "restored stable state rearmed without write");
+        test("recreation retains absolute deadline and consumed count",()->{
+            Rig r=new Rig();r.earlyReset();long at=r.c.getState().retryNotBeforeMs;r.advance(20_000);Rig restored=r.recreate();
+            check(restored.c.getState().retryNotBeforeMs==at && restored.c.getState().attempts==1,"persisted episode restored");
+            restored.advance(43_999);check(restored.writes==0,"not early after recreation");restored.advance(1);check(restored.writes==1 && restored.c.getState().autoRetriesUsed==1,"remaining time honored");
         });
-        test("platform write exception reaches a fail-closed boundary without retry", () -> {
-            Rig r = new Rig(); r.throwWrite = true; r.c.start(false);
-            boolean[] teardown = {false};
-            boolean success = FailureBoundary.run(() -> r.advance(4_000), () -> {
-                r.c.dispose(); teardown[0] = true;
-            });
-            check(!success && teardown[0] && !r.c.getState().armed && !r.wake, "boundary disposes after exception");
-            r.set(0); r.net(false); r.net(true); r.advance(100_000);
-            check(r.writes == 1 && r.c.getState().attemptConsumed, "exception does not replenish or retry write");
-            r.set(1); r.advance(100_000); check(!r.c.getState().armed && r.writes == 1, "external ON cannot revive platform failure");
+        test("repeated recreation cannot postpone the original retry forever",()->{
+            Rig r=new Rig();r.earlyReset();long at=r.c.getState().retryNotBeforeMs;
+            for(int i=0;i<5;i++){r.advance(10_000);r=r.recreate();check(r.c.getState().retryNotBeforeMs==at,"deadline unchanged");}
+            r.advance(14_000);check(r.writes==1 && r.c.getState().attempts==2,"retry still occurs");
         });
-        test("early reset then external ON rearms only after thirty seconds without writing", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(4_000); r.set(0);
-            long attempts = r.c.getState().attempts;
-            r.set(1); phase(r, "EXTERNAL_ON_STABILIZING"); r.advance(29_999);
-            check(r.c.getState().attemptConsumed && r.writes == 1, "no early rearm or write");
-            r.advance(1); phase(r, "OPEN_PENDING_PC");
-            check(!r.c.getState().attemptConsumed && r.c.getState().attempts == attempts && r.writes == 1,
-                    "external recovery is read only");
-            r.set(0); r.advance(4_000); check(r.writes == 2, "later independent episode may recover");
+        test("recreation after a used retry cannot grant two new retries",()->{
+            Rig r=new Rig();r.latch=false;r.c.start(false);r.advance(92_000);check(r.c.getState().autoRetriesUsed==1,"first retry consumed");
+            Rig restored=r.recreate();restored.advance(136_000);check(restored.writes==1,"one remaining write");
+            restored.advance(1_000_000);check(restored.writes==1 && "RETRY_EXHAUSTED".equals(restored.c.getState().code),"no new budget");
         });
-        test("external stable interval resets on OFF or real Wi-Fi loss", () -> {
-            Rig r = new Rig(); r.c.start(true); r.set(1); r.advance(20_000);
-            r.set(0); r.advance(100_000); phase(r, "WAIT_EXTERNAL_ON");
-            r.set(1); r.advance(20_000); r.net(false); r.advance(100_000);
-            phase(r, "WAIT_EXTERNAL_ON"); check(r.c.getState().attemptConsumed && r.writes == 0, "loss preserves consumed budget");
-            r.net(true); r.advance(29_999); check(r.c.getState().attemptConsumed, "new full interval required");
-            r.advance(1); phase(r, "OPEN_PENDING_PC"); check(r.writes == 0, "network return never writes while waiting");
+        test("recreation of exhausted episode cannot write after rate window expires",()->{
+            Rig r=new Rig(3,new long[]{1,2,3},2,0);r.c.start(true);r.advance(86_400_000);
+            check(r.writes==0 && "RETRY_EXHAUSTED".equals(r.c.getState().code),"exhaustion persists");
         });
-        test("duplicate external ON events neither multiply nor postpone stable timer", () -> {
-            Rig r = new Rig(); r.c.start(true); r.set(1);
-            for (int i = 0; i < 29; i++) { r.advance(1_000); r.set(1); r.net(true); }
-            r.advance(1_000); phase(r, "OPEN_PENDING_PC");
-            check(r.writes == 0 && r.queued == null && r.maxPending == 1, "one unchanged stable timer");
+        test("old 0.3 consumed record migrates to bounded retry without immediate write",()->{
+            Rig r=new Rig(13,new long[]{900_000},0,0);r.c.start(true);phase(r,"RETRY_WAIT");r.advance(63_999);check(r.writes==0,"migration honors delay");
+            r.advance(1);check(r.writes==1 && r.c.getState().attempts==14,"migration resumes automatically");
         });
-        test("observed network loss cancels stable timer even if Wi-Fi already returned", () -> {
-            Rig r = new Rig(); r.flag = 1; r.c.start(true); r.advance(29_999);
-            r.c.networkChanged(false); phase(r, "WAIT_EXTERNAL_ON");
-            check(r.queued == null && r.c.getState().attemptConsumed, "false event cannot be erased by new availability");
-            r.c.networkChanged(true); r.advance(29_999); check(r.c.getState().attemptConsumed, "fresh thirty seconds required");
-            r.advance(1); phase(r, "OPEN_PENDING_PC"); check(r.writes == 0, "race recovery stays read only");
+        test("global ten-minute circuit limits automatic retries",()->{
+            Rig r=new Rig(2,new long[]{999_000,999_500},0,0);r.earlyReset();r.advance(64_000);phase(r,"PAUSED");
+            check(r.writes==1 && "RATE_LIMITED".equals(r.c.getState().code) && !r.wake,"fourth write prevented");
+            r.set(1);r.advance(1_000_000);check(!r.c.getState().armed,"rate hard stop not auto-revived");
         });
-        test("observed switch OFF cancels stable timer even if next read would be ON", () -> {
-            Rig r = new Rig(); r.flag = 1; r.c.start(true); r.advance(29_999);
-            r.nextReadOff = true; r.c.settingChanged(); phase(r, "WAIT_EXTERNAL_ON");
-            check(r.queued == null && r.c.getState().attemptConsumed, "observed OFF cannot be reread away");
-            r.c.settingChanged(); r.advance(29_999); check(r.c.getState().attemptConsumed, "new full interval after ON");
-            r.advance(1); phase(r, "OPEN_PENDING_PC"); check(r.writes == 0, "setting race recovery stays read only");
+        test("manual repeated starts cannot bypass persisted global circuit",()->{
+            Rig r=new Rig();r.latch=false;for(int i=0;i<3;i++){r.c.start(false);r.advance(16_000);}r.c.start(false);r.advance(4_000);
+            phase(r,"PAUSED");check(r.writes==3 && "RATE_LIMITED".equals(r.c.getState().code),"manual reset does not erase rate history");
         });
-        test("OFF then ON at stable deadline starts a fresh timer instead of getting stuck", () -> {
-            Rig r = new Rig(); r.flag = 1; r.c.start(true); r.nextReadOff = true;
-            r.advance(30_000); phase(r, "EXTERNAL_ON_STABILIZING");
-            check(r.queued != null && r.c.getState().attemptConsumed, "a consumed callback cannot leave a timerless stabilizing state");
-            r.advance(29_999); check(r.c.getState().attemptConsumed, "deadline reset requires full new interval");
-            r.advance(1); phase(r, "OPEN_PENDING_PC"); check(r.writes == 0, "deadline race never writes");
+        test("permission revoked during retry wait hard-stops without another write",()->{
+            Rig r=new Rig();r.earlyReset();r.permission=false;r.advance(60_000);phase(r,"PAUSED");check(r.writes==1,"no retry without permission");
+            r.permission=true;r.set(1);r.net(true);r.advance(1_000_000);check(!r.c.getState().armed && r.writes==1,"no silent revival");
         });
-        test("STOP during external observation cancels stale timers permanently", () -> {
-            Rig r = new Rig(); r.c.start(true); r.set(1); Runnable stale = r.queued;
-            r.c.stop(); stale.run(); r.net(false); r.net(true); r.set(1); r.advance(100_000);
-            phase(r, "STOPPED"); check(!r.c.getState().armed && r.writes == 0 && r.queued == null, "user stop cannot auto revive");
+        test("permission revoked at retry stability deadline is rechecked",()->{
+            Rig r=new Rig();r.earlyReset();r.advance(60_000);r.permission=false;r.advance(4_000);phase(r,"PAUSED");check(r.writes==1,"no unauthorized write");
         });
-        test("hard permission write and rate pauses cannot auto revive on external ON", () -> {
-            Rig missing = new Rig(); missing.permission = false; missing.c.start(false);
-            missing.permission = true; missing.set(1); missing.advance(100_000);
-            phase(missing, "PAUSED"); check(!missing.c.getState().armed && missing.writes == 0, "permission pause stays stopped");
-            Rig rejected = new Rig(); rejected.acceptWrite = false; rejected.c.start(false); rejected.advance(4_000);
-            rejected.set(1); rejected.advance(100_000); phase(rejected, "PAUSED");
-            check(!rejected.c.getState().armed && rejected.writes == 1, "write rejection stays stopped");
-            Rig rate = new Rig(3, new long[]{0, 1, 2}); rate.now = 100; rate.c.start(false); rate.advance(4_000);
-            rate.set(1); rate.advance(100_000); phase(rate, "PAUSED");
-            check(!rate.c.getState().armed && rate.writes == 0 && "RATE_LIMITED".equals(rate.c.getState().code), "rate pause stays stopped");
+        test("initial setting rejection remains a hard stop",()->{
+            Rig r=new Rig();r.accept=false;r.c.start(false);r.advance(4_000);phase(r,"PAUSED");r.set(1);r.advance(1_000_000);
+            check(r.writes==1 && !r.c.getState().armed && "SETTING_WRITE_REJECTED".equals(r.c.getState().code),"no rejected-setting retry");
         });
-        test("service recreation restores passive wait and does not reset persistent rate history", () -> {
-            Rig before = new Rig(3, new long[]{0, 1, 2}); before.now = 100; before.c.start(true);
-            RecoveryController.Snapshot snapshot = before.c.getState(); before.c.dispose();
-            Rig restored = new Rig(snapshot.attempts, snapshot.recentAttempts); restored.now = before.now;
-            restored.c.start(snapshot.attemptConsumed); restored.net(false); restored.net(true); restored.advance(100_000);
-            phase(restored, "WAIT_EXTERNAL_ON"); check(restored.writes == 0 && restored.c.getState().attemptConsumed, "restoration does not retry");
-            restored.set(1); restored.advance(30_000); phase(restored, "OPEN_PENDING_PC");
-            check(restored.c.getState().attempts == 3 && restored.c.getState().recentAttempts.length == 3, "rate history preserved");
-            restored.set(0); restored.advance(4_000); phase(restored, "PAUSED");
-            check(restored.writes == 0 && "RATE_LIMITED".equals(restored.c.getState().code), "new episode still rate limited");
+        test("setting rejection during an automatic retry also hard-stops",()->{
+            Rig r=new Rig();r.earlyReset();r.accept=false;r.advance(64_000);phase(r,"PAUSED");r.advance(1_000_000);check(r.writes==2,"exactly one rejected retry");
         });
-        test("best-effort cleanup runs every step after platform cleanup failures", () -> {
-            int[] steps = {0};
-            boolean complete = FailureBoundary.cleanup(
-                    () -> { steps[0]++; throw new IllegalArgumentException("TEST_UNREGISTER"); },
-                    () -> { steps[0]++; throw new IllegalStateException("TEST_WAKE"); },
-                    () -> steps[0]++);
-            check(!complete && steps[0] == 3, "independent cleanup attempts");
+        test("storage failure before a retry prevents its setting write",()->{
+            Rig r=new Rig();r.earlyReset();r.failSaveAtAttempt=2;
+            boolean ok=FailureBoundary.run(()->r.advance(64_000),r.c::dispose);
+            check(!ok && r.writes==1 && !r.c.getState().armed && r.queued==null && !r.wake,"persist before write fail closed");
         });
-        test("stop remains disarmed if wake release and failure callback throw", () -> {
-            Rig r = new Rig(); r.c.start(false); r.advance(4_000); r.throwRelease = true;
-            boolean success = FailureBoundary.run(r.c::stop, () -> {
-                FailureBoundary.cleanup(r.c::dispose, () -> { throw new IllegalStateException("TEST_NOTIFY"); });
-                throw new IllegalStateException("TEST_FINAL_FAILURE");
-            });
-            check(!success && !r.c.getState().armed && r.queued == null, "stop invalidates before failing effect");
-            r.set(0); r.advance(100_000); check(r.writes == 1, "no retry after failed cleanup");
+        test("platform exception at retry does not loop or revive",()->{
+            Rig r=new Rig();r.earlyReset();r.throwWrite=true;boolean ok=FailureBoundary.run(()->r.advance(64_000),r.c::dispose);
+            check(!ok && r.writes==2 && !r.c.getState().armed && !r.wake,"platform failure disposed");r.set(1);r.net(true);r.advance(1_000_000);check(r.writes==2,"no retry after platform failure");
         });
-        System.out.println("ALL " + tests + " TESTS PASSED");
+        test("STOP invalidates even already dispatched retry callbacks",()->{
+            Rig r=new Rig();r.earlyReset();Runnable stale=r.queued;r.c.stop();stale.run();r.net(false);r.net(true);r.set(0);r.advance(1_000_000);
+            phase(r,"STOPPED");check(r.writes==1 && r.queued==null && !r.wake,"user stop wins");
+        });
+        test("STOP during retry stabilization invalidates the write callback",()->{
+            Rig r=new Rig();r.earlyReset();r.advance(60_000);Runnable stale=r.queued;r.c.stop();stale.run();r.advance(1_000_000);check(r.writes==1 && !r.wake,"no stale write");
+        });
+        test("old generation cannot fire after a new explicit start",()->{
+            Rig r=new Rig();r.earlyReset();Runnable stale=r.queued;r.c.stop();r.c.start(false);stale.run();r.advance(4_000);check(r.writes==2,"new arm only");
+        });
+        test("backward wall clock never skips backoff",()->{
+            Rig r=new Rig();r.earlyReset();r.wallBase-=30_000;r.advance(60_000);check(r.writes==1 && !r.wake,"clock rollback not early");
+            r.advance(33_999);check(r.writes==1,"remaining deadline honored");r.advance(1);check(r.writes==2,"eventual bounded retry");
+        });
+        test("forward clock cannot multiply pending retries",()->{
+            Rig r=new Rig();r.earlyReset();r.wallBase+=3_600_000;for(int i=0;i<100;i++)r.set(0);
+            r.advance(64_000);check(r.writes==2,"one callback only");r.advance(30_000);phase(r,"OPEN_PENDING_PC");
+        });
+        test("retry exhaustion can accept genuine external stable ON without a write",()->{
+            Rig r=new Rig(3,new long[]{999_000,999_100,999_200},2,0);r.c.start(true);r.set(1);r.advance(30_000);phase(r,"OPEN_PENDING_PC");
+            check(r.writes==0,"external recovery is read only");r.set(0);r.advance(4_000);phase(r,"PAUSED");check(r.writes==0,"old rate history retained");
+        });
+        test("stable recovered network supports a later independent episode",()->{
+            Rig r=new Rig();r.earlyReset();r.advance(94_000);phase(r,"OPEN_PENDING_PC");r.net(false);r.flag=0;r.net(true);r.advance(34_000);
+            phase(r,"OPEN_PENDING_PC");check(r.writes==3 && r.c.getState().autoRetriesUsed==0,"independent recovery retained");
+        });
+        test("invalid persisted retry records fail closed",()->{
+            for(int used:new int[]{-1,3,Integer.MAX_VALUE}){boolean failed=false;try{new Rig(0,new long[0],used,0);}catch(IllegalArgumentException expected){failed=true;}check(failed,"bad count rejected");}
+            boolean failed=false;try{new Rig(0,new long[0],0,-1);}catch(IllegalArgumentException expected){failed=true;}check(failed,"bad deadline rejected");
+        });
+        test("corrupt historical rate records cannot enable retry",()->{
+            Rig r=new Rig(3,new long[]{Long.MAX_VALUE,Long.MAX_VALUE,Long.MAX_VALUE},0,0);r.c.start(true);r.advance(64_000);
+            phase(r,"PAUSED");check(r.writes==0 && "RATE_LIMITED".equals(r.c.getState().code),"corrupt rate history stays conservative");
+        });
+        test("best-effort boundary cleanup still runs every action",()->{
+            int[] n={0};boolean ok=FailureBoundary.cleanup(()->{n[0]++;throw new IllegalStateException();},()->n[0]++,()->n[0]++);
+            check(!ok && n[0]==3,"independent cleanup attempts");
+        });
+        System.out.println("ALL "+tests+" TESTS PASSED");
     }
 }

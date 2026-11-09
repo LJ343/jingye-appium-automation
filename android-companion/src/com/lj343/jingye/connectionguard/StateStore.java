@@ -15,6 +15,17 @@ final class StateStore {
     boolean desiredArmed() { return prefs.getBoolean("armed", false); }
     boolean consumed() { return prefs.getBoolean("attempt_consumed", false); }
     long attempts() { return prefs.getLong("attempts", 0); }
+    int autoRetriesUsed() {
+        long value = prefs.getLong("auto_retries_used", 0);
+        if (value < 0 || value > RecoveryController.MAX_AUTO_RETRIES)
+            throw new IllegalStateException("RETRY_RECORD_INVALID");
+        return (int) value;
+    }
+    long retryNotBeforeMs() {
+        long value = prefs.getLong("retry_not_before_ms", 0);
+        if (value < 0) throw new IllegalStateException("RETRY_RECORD_INVALID");
+        return value;
+    }
     long[] recentAttempts() {
         String raw = prefs.getString("attempt_times", "");
         if (raw.isEmpty()) return new long[0];
@@ -30,10 +41,12 @@ final class StateStore {
 
     synchronized boolean save(RecoveryController.Snapshot s, boolean running) {
         long now = System.currentTimeMillis();
-        String event = now + " " + s.phase + " " + s.code + " attempts=" + s.attempts;
+        String event = now + " " + s.phase + " " + s.code + " attempts=" + s.attempts
+                + " auto_retries=" + s.autoRetriesUsed + " next_retry=" + s.retryNotBeforeMs;
         String prior = prefs.getString("last_event", "");
         String history = prefs.getString("history", "");
-        String signature = s.phase + "/" + s.code + "/" + s.attempts;
+        String signature = s.phase + "/" + s.code + "/" + s.attempts + "/"
+                + s.autoRetriesUsed + "/" + s.retryNotBeforeMs;
         StringBuilder times = new StringBuilder();
         for (long time : s.recentAttempts) { if (times.length() > 0) times.append(','); times.append(time); }
         if (!signature.equals(prior)) {
@@ -46,6 +59,7 @@ final class StateStore {
                 .putBoolean("service_running", running).putBoolean("wifi_available", s.wifi)
                 .putBoolean("switch_enabled", s.enabled).putBoolean("timer_pending", s.timerPending)
                 .putString("phase", s.phase).putString("code", s.code).putLong("attempts", s.attempts)
+                .putLong("auto_retries_used", s.autoRetriesUsed).putLong("retry_not_before_ms", s.retryNotBeforeMs)
                 .putLong("updated_at_ms", now).putString("last_event", signature)
                 .putString("attempt_times", times.toString()).putString("history", history));
     }
@@ -59,6 +73,7 @@ final class StateStore {
         markPlatformFault();
         return commit(prefs.edit().putBoolean("armed", false).putBoolean("service_running", false)
                 .putBoolean("timer_pending", false).putString("phase", "PAUSED")
+                .putLong("retry_not_before_ms", 0)
                 .putString("code", "PLATFORM_EXCEPTION").putLong("updated_at_ms", System.currentTimeMillis()));
     }
 
@@ -83,6 +98,10 @@ final class StateStore {
             json.put("phase", prefs.getString("phase", "STOPPED"));
             json.put("code", prefs.getString("code", "USER_STOPPED"));
             json.put("attempts", attempts());
+            json.put("auto_retries_used", autoRetriesUsed());
+            json.put("auto_retry_limit", RecoveryController.MAX_AUTO_RETRIES);
+            json.put("next_retry_at_ms", retryNotBeforeMs());
+            json.put("retry_policy", "Up to two retries after 60s/120s; persistent; no retry after permission/write/platform/rate faults");
             json.put("rate_limit", "3 attempts / 10 minutes; persisted across service recreation");
             json.put("updated_at_ms", prefs.getLong("updated_at_ms", 0));
             json.put("meaning", "Switch state only; PC ADB connectivity is unverified. Persisted state may be stale after OS kill.");

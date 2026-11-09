@@ -11,6 +11,9 @@ public final class RecoveryController {
     public static final long REARM_MS = 30_000;
     public static final long RATE_WINDOW_MS = 600_000;
     public static final int MAX_ATTEMPTS_PER_WINDOW = 3;
+    public static final int MAX_AUTO_RETRIES = 2;
+    public static final long FIRST_RETRY_MS = 60_000;
+    public static final long SECOND_RETRY_MS = 120_000;
 
     public interface Port {
         boolean wifiAvailable();
@@ -31,14 +34,17 @@ public final class RecoveryController {
     public static final class Snapshot {
         public final boolean armed, wifi, enabled, attemptConsumed, timerPending;
         public final String phase, code;
-        public final long attempts;
+        public final long attempts, retryNotBeforeMs;
+        public final int autoRetriesUsed;
         public final long[] recentAttempts;
         Snapshot(boolean armed, boolean wifi, boolean enabled, boolean consumed,
-                 boolean pending, String phase, String code, long attempts, long[] recentAttempts) {
+                 boolean pending, String phase, String code, long attempts, long[] recentAttempts,
+                 int autoRetriesUsed, long retryNotBeforeMs) {
             this.armed = armed; this.wifi = wifi; this.enabled = enabled;
             this.attemptConsumed = consumed; this.timerPending = pending;
             this.phase = phase; this.code = code; this.attempts = attempts;
             this.recentAttempts = recentAttempts.clone();
+            this.autoRetriesUsed = autoRetriesUsed; this.retryNotBeforeMs = retryNotBeforeMs;
         }
     }
 
@@ -47,6 +53,8 @@ public final class RecoveryController {
     private boolean armed, wifi, enabled, attemptConsumed, seenEnabled, externalWait;
     private String phase = "STOPPED", code = "USER_STOPPED";
     private long attempts, generation;
+    private int autoRetriesUsed;
+    private long retryNotBeforeMs;
     private Runnable pending;
     private final List<Long> recentAttempts = new ArrayList<>();
 
@@ -55,7 +63,15 @@ public final class RecoveryController {
     }
 
     public RecoveryController(Port port, Scheduler scheduler, long previousAttempts, long[] previousTimes) {
+        this(port, scheduler, previousAttempts, previousTimes, 0, 0);
+    }
+
+    public RecoveryController(Port port, Scheduler scheduler, long previousAttempts, long[] previousTimes,
+                              int previousAutoRetries, long previousRetryAt) {
+        if (previousAutoRetries < 0 || previousAutoRetries > MAX_AUTO_RETRIES || previousRetryAt < 0)
+            throw new IllegalArgumentException("INVALID_RETRY_RECORD");
         this.port = port; this.scheduler = scheduler; this.attempts = previousAttempts;
+        this.autoRetriesUsed = previousAutoRetries; this.retryNotBeforeMs = previousRetryAt;
         for (long time : previousTimes) recentAttempts.add(time);
     }
 
@@ -63,16 +79,17 @@ public final class RecoveryController {
         long[] times = new long[recentAttempts.size()];
         for (int i = 0; i < times.length; i++) times[i] = recentAttempts.get(i);
         return new Snapshot(armed, wifi, enabled, attemptConsumed, pending != null,
-                phase, code, attempts, times);
+                phase, code, attempts, times, autoRetriesUsed, retryNotBeforeMs);
     }
 
     /** A user start resets the episode budget, never the persisted short-term rate limit. */
     public void start(boolean restoredConsumed) {
         cancelTimer(); port.releaseWake();
         armed = true; attemptConsumed = restoredConsumed; seenEnabled = false; externalWait = false;
+        if (!restoredConsumed) { autoRetriesUsed = 0; retryNotBeforeMs = 0; }
         wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
         if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
-        // A consumed episode is restored read-only, including after service death.
+        // Recreate the same persisted episode; neither retry count nor global rate resets.
         if (attemptConsumed) { waitForExternalOn(); return; }
         if (!wifi) { set("WAIT_WIFI", "WAIT_WIFI"); return; }
         if (enabled) {
@@ -83,7 +100,8 @@ public final class RecoveryController {
     }
 
     public void stop() {
-        armed = false; externalWait = false; cancelTimer(); port.releaseWake();
+        armed = false; externalWait = false; retryNotBeforeMs = 0; autoRetriesUsed = 0;
+        cancelTimer(); port.releaseWake();
         set("STOPPED", "USER_STOPPED");
     }
 
@@ -96,19 +114,23 @@ public final class RecoveryController {
         boolean previously = wifi;
         wifi = available;
         if (!armed) { publish(); return; }
-        // Network loss/return must not replenish an unverified consumed episode.
+        // Network loss/return never replenishes an unverified consumed episode.
         if (externalWait) {
-            if (!available) resetExternalObservation();
+            if (!available) waitForRetryWifi();
             else observeExternalOn();
             return;
         }
         if (!available) {
+            if (attemptConsumed) {
+                externalWait = true; ensureRetryDeadline(); waitForRetryWifi(); return;
+            }
             cancelTimer(); port.releaseWake();
             set("WAIT_WIFI", "WAIT_WIFI"); return;
         }
         if (previously) { publish(); return; }
         // An actual Wi-Fi loss/return starts a new recovery episode.
         attemptConsumed = false;
+        autoRetriesUsed = 0; retryNotBeforeMs = 0;
         enabled = port.readEnabled() == 1;
         if (enabled) { set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED"); }
         else { stabilize(); }
@@ -118,7 +140,7 @@ public final class RecoveryController {
         enabled = port.readEnabled() == 1;
         if (!armed) { publish(); return; }
         if (externalWait) {
-            if (!enabled) resetExternalObservation();
+            if (!enabled) scheduleRetryWait();
             else observeExternalOn();
             return;
         }
@@ -145,23 +167,39 @@ public final class RecoveryController {
         cancelTimer();
         port.holdWake(WAKE_WINDOW_MS);
         set("STABILIZING", "WAIT_STABLE_WIFI");
-        later(STABLE_MS, this::attempt);
+        later(STABLE_MS, () -> attempt(false));
         publish();
     }
 
-    private void attempt() {
+    private void attempt(boolean retry) {
         if (!armed) return;
         wifi = port.wifiAvailable();
-        if (!wifi) { port.releaseWake(); set("WAIT_WIFI", "WAIT_WIFI"); return; }
+        if (!wifi) {
+            if (retry) { waitForRetryWifi(); }
+            else { port.releaseWake(); set("WAIT_WIFI", "WAIT_WIFI"); }
+            return;
+        }
         enabled = port.readEnabled() == 1;
-        if (enabled) { port.releaseWake(); set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED"); return; }
+        if (enabled) {
+            port.releaseWake();
+            if (retry) observeExternalOn();
+            else set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
+            return;
+        }
         if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
-        if (attemptConsumed) { waitForExternalOn(); return; }
+        if (retry) {
+            if (!externalWait || !attemptConsumed || autoRetriesUsed >= MAX_AUTO_RETRIES
+                    || retryNotBeforeMs == 0 || port.nowMillis() < retryNotBeforeMs) {
+                waitForExternalOn(); return;
+            }
+        } else if (attemptConsumed) { waitForExternalOn(); return; }
         long now = port.nowMillis();
         // A backward wall-clock jump keeps future timestamps, conservatively limiting writes.
         recentAttempts.removeIf(time -> now >= time && now - time >= RATE_WINDOW_MS);
         if (recentAttempts.size() >= MAX_ATTEMPTS_PER_WINDOW) { pause("RATE_LIMITED"); return; }
         recentAttempts.add(now);
+        if (retry) autoRetriesUsed++;
+        retryNotBeforeMs = 0; externalWait = false;
         attemptConsumed = true;
         attempts++;
         seenEnabled = false;
@@ -190,22 +228,72 @@ public final class RecoveryController {
             if (!wifi) { networkChanged(false); return; }
             enabled = port.readEnabled() == 1;
             if (!enabled) { waitForExternalOn(); return; }
-            attemptConsumed = false;
-            set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
+            completeRecovery();
         });
         publish();
     }
 
-    /** Keep the user's start intent and listeners, but never repeat this episode's write. */
+    /** A soft failure gets at most two persisted, backed-off retries, never a loop. */
     private void waitForExternalOn() {
         externalWait = true; attemptConsumed = true;
-        resetExternalObservation();
+        cancelTimer(); port.releaseWake();
         observeExternalOn();
     }
 
-    private void resetExternalObservation() {
+    private void ensureRetryDeadline() {
+        if (retryNotBeforeMs != 0 || autoRetriesUsed >= MAX_AUTO_RETRIES) return;
+        long delay = autoRetriesUsed == 0 ? FIRST_RETRY_MS : SECOND_RETRY_MS;
+        long now = port.nowMillis();
+        retryNotBeforeMs = now > Long.MAX_VALUE - delay ? Long.MAX_VALUE : now + delay;
+    }
+
+    private void waitForRetryWifi() {
         cancelTimer(); port.releaseWake();
-        set("WAIT_EXTERNAL_ON", "WAIT_EXTERNAL_ON");
+        if (autoRetriesUsed >= MAX_AUTO_RETRIES) {
+            retryNotBeforeMs = 0; set("WAIT_EXTERNAL_ON", "RETRY_EXHAUSTED"); return;
+        }
+        ensureRetryDeadline();
+        set("WAIT_WIFI_RETRY", "WAIT_RETRY_WIFI");
+    }
+
+    private void scheduleRetryWait() {
+        if (!armed || !externalWait) return;
+        if (!wifi) { waitForRetryWifi(); return; }
+        if (autoRetriesUsed >= MAX_AUTO_RETRIES) {
+            cancelTimer(); port.releaseWake(); retryNotBeforeMs = 0;
+            set("WAIT_EXTERNAL_ON", "RETRY_EXHAUSTED"); return;
+        }
+        ensureRetryDeadline();
+        if (pending != null && ("RETRY_WAIT".equals(phase) || "RETRY_STABILIZING".equals(phase))) {
+            publish(); return; // Duplicate OFF/network events cannot reset or postpone this timer.
+        }
+        cancelTimer(); port.releaseWake();
+        long now = port.nowMillis();
+        long remaining = retryNotBeforeMs <= now ? 0 : retryNotBeforeMs - now;
+        if (remaining < 0) remaining = Long.MAX_VALUE;
+        set("RETRY_WAIT", "WAIT_RETRY");
+        later(Math.min(remaining, SECOND_RETRY_MS), this::beginRetryStabilization);
+        publish();
+    }
+
+    private void beginRetryStabilization() {
+        if (!armed || !externalWait) return;
+        wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
+        if (!wifi) { waitForRetryWifi(); return; }
+        if (enabled) { observeExternalOn(); return; }
+        if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
+        if (port.nowMillis() < retryNotBeforeMs) { scheduleRetryWait(); return; }
+        port.holdWake(WAKE_WINDOW_MS);
+        set("RETRY_STABILIZING", "WAIT_STABLE_RETRY");
+        later(STABLE_MS, () -> attempt(true));
+        publish();
+    }
+
+    private void completeRecovery() {
+        cancelTimer(); port.releaseWake();
+        externalWait = false; attemptConsumed = false;
+        autoRetriesUsed = 0; retryNotBeforeMs = 0;
+        set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
     }
 
     /** Event-driven read-only observation: only a genuine stable ON can rearm. */
@@ -213,27 +301,28 @@ public final class RecoveryController {
         if (!armed || !externalWait) return;
         wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
         if (!wifi || !enabled) {
-            resetExternalObservation();
+            scheduleRetryWait();
             return;
         }
-        if ("EXTERNAL_ON_STABILIZING".equals(phase)) { publish(); return; }
+        if ("EXTERNAL_ON_STABILIZING".equals(phase) && pending != null) { publish(); return; }
+        cancelTimer(); port.releaseWake();
         set("EXTERNAL_ON_STABILIZING", "WAIT_EXTERNAL_ON_STABLE");
         later(REARM_MS, () -> {
             if (!armed || !externalWait) return;
             wifi = port.wifiAvailable(); enabled = port.readEnabled() == 1;
             if (!wifi || !enabled) {
                 // This timer has fired; do not preserve a stabilizing phase with no timer.
-                resetExternalObservation(); observeExternalOn(); return;
+                cancelTimer(); port.releaseWake();
+                set("RETRY_WAIT", "WAIT_RETRY"); observeExternalOn(); return;
             }
             if (!port.canWrite()) { pause("PERMISSION_MISSING"); return; }
-            externalWait = false; attemptConsumed = false;
-            set("OPEN_PENDING_PC", "SWITCH_ON_PC_UNVERIFIED");
+            completeRecovery();
         });
         publish();
     }
 
     private void pause(String reason) {
-        armed = false; externalWait = false; cancelTimer(); port.releaseWake();
+        armed = false; externalWait = false; retryNotBeforeMs = 0; cancelTimer(); port.releaseWake();
         set("PAUSED", reason);
     }
 

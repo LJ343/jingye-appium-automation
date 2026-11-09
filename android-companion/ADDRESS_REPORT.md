@@ -1,3 +1,7 @@
+# 0.4 update
+
+Address reporting and provisioning below are unchanged. The recovery policy is now the bounded retry policy in [0.4 release](../docs/WIRELESS_RELEASE_0.4.md); statements below about byte-identical 0.2 policy describe the historical 0.3 release only. Same-signer 0.4 adds no permissions.
+
 # Companion 0.3 address reporting
 
 VersionCode 3, versionName 0.3-review. Only INTERNET is newly added. RecoveryController, FailureBoundary and StateStore are unchanged from 0.2. The APK uses the same certificate as 0.2; SHA256SUMS.txt and verification.json are Release assets. No signing keys or SDK/build dependencies are included.

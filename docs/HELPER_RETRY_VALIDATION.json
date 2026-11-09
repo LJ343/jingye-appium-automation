@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "revision": "0.4",
+  "deployed": {
+    "passed": true,
+    "recorded_at": "2026-11-09T11:06:21.493828+08:00",
+    "version": "0.4",
+    "version_code": 4,
+    "apk_sha256": "b11353f191f83d99c3083a7f8fd0b2d9cbaa17f03544f2697b0b8259079ab65b",
+    "source_sha256": "016111ddb62c2abf7c703ab5fa8aaf396f060e65e90254f9007d86222995cbaf",
+    "same_signer": true,
+    "installed_apk_hash_verified": true,
+    "existing_permissions_preserved": true,
+    "foreground_service_armed": true,
+    "normal_switch_attempts_before": 15,
+    "normal_switch_attempts_after": 15,
+    "actual_storage_tests": 9,
+    "policy_tests": 41,
+    "protocol_assertions": 12,
+    "desktop_tests": 81,
+    "original_authenticated_report_config_preserved": true,
+    "authenticated_report_received": true,
+    "temporary_receiver_closed": true,
+    "desktop_sources_and_configuration_unchanged": true,
+    "host_instances_unchanged": true,
+    "pc_status": {
+      "observed_at": "2026-11-09T11:05:16+08:00",
+      "code": "CONNECTED",
+      "same_phone_identity": true,
+      "response_ms": 78
+    },
+    "initial_install_timeout_preserved": true,
+    "system_confirmation_completed": true,
+    "real_switch_fault_injection": false,
+    "new_business_run": false,
+    "pairing_commands": 0,
+    "host_service_restarts": 0,
+    "official_source_changed": false,
+    "business_rules_changed": false
+  },
+  "source_validation": {
+    "passed": true,
+    "offline_only": true,
+    "phone_actions": 0,
+    "business_runs": 0,
+    "policy_tests": 41,
+    "actual_storage_tests": 9,
+    "java_protocol_assertions": 12,
+    "desktop_tests": 81,
+    "protocol_shared_vector": true,
+    "address_protocol_and_reporter_unchanged": true,
+    "android_permissions_unchanged": true,
+    "desktop_sources_unchanged": true,
+    "source_sha256": "016111ddb62c2abf7c703ab5fa8aaf396f060e65e90254f9007d86222995cbaf",
+    "steps": [
+      {
+        "name": "compile-policy",
+        "passed": true
+      },
+      {
+        "name": "policy-tests",
+        "passed": true
+      },
+      {
+        "name": "compile-storage",
+        "passed": true
+      },
+      {
+        "name": "storage-tests",
+        "passed": true
+      },
+      {
+        "name": "compile-protocol",
+        "passed": true
+      },
+      {
+        "name": "protocol-tests",
+        "passed": true
+      },
+      {
+        "name": "desktop-regression",
+        "passed": true
+      }
+    ]
+  },
+  "exported_source_offline": {
+    "passed": true,
+    "python": {
+      "general": 96,
+      "reconciliation": 141,
+      "platform": 13
+    },
+    "python_total": 250,
+    "helper_state": 41,
+    "helper_storage": 9,
+    "java_protocol_assertions": 12,
+    "shared_protocol_vector": true,
+    "device_actions": 0,
+    "network_actions": 0
+  }
+}
