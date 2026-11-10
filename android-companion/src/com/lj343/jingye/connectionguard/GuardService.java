@@ -23,6 +23,7 @@ import android.provider.Settings;
 
 /** Every controller invocation and setting write runs on the main looper. */
 public final class GuardService extends Service implements RecoveryController.Port {
+    static volatile boolean liveArmed;
     public static final String ACTION_START = "com.lj343.jingye.connectionguard.START";
     public static final String ACTION_STOP = "com.lj343.jingye.connectionguard.STOP";
     private static final String KEY = "adb_wifi_enabled";
@@ -133,7 +134,7 @@ public final class GuardService extends Service implements RecoveryController.Po
     /** No retry and no setting write is allowed after entering this method. */
     private void failClosed() {
         if (fatal) return;
-        fatal = true; lastStoreOk = false;
+        fatal = true; lastStoreOk = false; liveArmed = false;
         StateStore.markPlatformFault();
         FailureBoundary.cleanup(
                 // Persist revoked recovery intent before cancellation or notification APIs.
@@ -177,6 +178,9 @@ public final class GuardService extends Service implements RecoveryController.Po
         if (fatal || destroying) return;
         lastStoreOk = store.save(state, true);
         if (!lastStoreOk) throw new IllegalStateException("STATE_PERSIST_FAILED");
+        boolean becameReady = !liveArmed && state.armed && foreground;
+        liveArmed = state.armed && foreground;
+        if (becameReady) TrustAccessibilityService.guardBecameReady();
         if (addressReporter != null) addressReporter.setEnabled(state.armed && state.wifi && state.enabled);
         if (foreground) getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification(statusText(state.code)));
         if (!state.armed && !unwatchBestEffort()) throw new IllegalStateException("WATCH_CLEANUP_FAILED");
@@ -215,7 +219,7 @@ public final class GuardService extends Service implements RecoveryController.Po
     }
 
     @Override public void onDestroy() {
-        destroying = true;
+        destroying = true; liveArmed = false;
         boolean complete = FailureBoundary.cleanup(
                 () -> { if (controller != null) controller.dispose(); },
                 () -> { if (addressReporter != null) addressReporter.close(); },

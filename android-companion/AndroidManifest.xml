@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.lj343.jingye.connectionguard" android:versionCode="4" android:versionName="0.4">
+    package="com.lj343.jingye.connectionguard" android:versionCode="8" android:versionName="0.5.3">
     <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -10,6 +10,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <queries>
+        <package android:name="com.android.systemui" />
+    </queries>
     <application android:label="敬业连接恢复助手" android:debuggable="false"
         android:allowBackup="false" android:usesCleartextTraffic="false"
         android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
@@ -21,6 +27,14 @@
         </activity>
         <service android:name=".GuardService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <service android:name=".TrustAccessibilityService" android:exported="true"
+            android:label="@string/network_trust_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/network_trust_service" />
+        </service>
         <provider android:name=".StatusProvider" android:authorities="com.lj343.jingye.connectionguard.status"
             android:exported="true" android:readPermission="android.permission.DUMP"
             android:writePermission="android.permission.DUMP" android:grantUriPermissions="false" />

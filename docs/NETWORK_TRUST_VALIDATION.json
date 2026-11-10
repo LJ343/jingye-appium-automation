@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "revision": "0.5.3",
+  "deployed": {
+    "schema": 1,
+    "passed": true,
+    "recorded_at": "2026-11-10T17:25:58+08:00",
+    "version": "0.5.3",
+    "version_code": 8,
+    "apk_sha256": "197fb9ed171d6a20bc67bdc50ba9356da21aa1a71a8f7ab2e578df61c267d6b3",
+    "source_sha256": "5cffb31b64ff9ec9c79e241d871f5ad47bf2e2fd36c9802712074fe70025e816",
+    "signer_certificate_sha256": "b2728d51c5b8039a83b5abaabaa8c559401937139defcb1cc67eda6145bf9fa6",
+    "installed_artifact_readback_verified": true,
+    "legacy_permissions_retained": true,
+    "private_reporter_configuration_preserved": true,
+    "live_foreground_guard_armed": true,
+    "accessibility_connected": true,
+    "exact_ap_allowlist_count": 1,
+    "acceptance": {
+      "official_systemui_dialog_launched": true,
+      "known_enrolled_ap_only": true,
+      "test_target_source": "current SSID and latest association; helper independently requires exact enrolled AP match",
+      "automatic_allow_sent": true,
+      "dialog_closed": true,
+      "pc_connected_same_phone": true,
+      "pc_public_key_present_in_phone_saved_key_dump_before_and_after": true,
+      "no_uiautomation_or_pc_ui_actions_during_measurement": true,
+      "phone_switch_write_delta": 0,
+      "wireless_debugging_on": true,
+      "usb_debugging_off": true,
+      "approval_elapsed_ms": 874
+    },
+    "desktop_code_and_config_unchanged": true,
+    "host_service_instances_unchanged": true,
+    "existing_pairings_deleted": 0,
+    "new_pairing_performed_as_separately_authorized_repair": true,
+    "business_runs": 0,
+    "appium_sessions": 0,
+    "limits": {
+      "connection_disconnect_test_performed": false,
+      "real_unknown_ap_test_performed": false,
+      "natural_roaming_tested": false,
+      "real_switch_reset_injected": false,
+      "force_stop_or_reboot_tested": false,
+      "new_long_business_run": false,
+      "previous_pairing_loss_exact_cause_confirmed": false,
+      "screen_unlock_automated": false
+    }
+  },
+  "source_validation": {
+    "passed": true,
+    "offline_only": true,
+    "phone_actions": 0,
+    "business_runs": 0,
+    "policy_tests": 41,
+    "storage_tests": 9,
+    "trust_tests": 56,
+    "trust_storage_tests": 14,
+    "desktop_tests": 81,
+    "protocol_assertions": 12,
+    "window_tests": 9,
+    "source_sha256": "5cffb31b64ff9ec9c79e241d871f5ad47bf2e2fd36c9802712074fe70025e816",
+    "steps": [
+      {
+        "name": "compile-policy",
+        "passed": true
+      },
+      {
+        "name": "policy",
+        "passed": true
+      },
+      {
+        "name": "compile-trust",
+        "passed": true
+      },
+      {
+        "name": "trust",
+        "passed": true
+      },
+      {
+        "name": "compile-window",
+        "passed": true
+      },
+      {
+        "name": "window",
+        "passed": true
+      },
+      {
+        "name": "compile-storage",
+        "passed": true
+      },
+      {
+        "name": "storage",
+        "passed": true
+      },
+      {
+        "name": "compile-trust-storage",
+        "passed": true
+      },
+      {
+        "name": "trust-storage",
+        "passed": true
+      },
+      {
+        "name": "compile-protocol",
+        "passed": true
+      },
+      {
+        "name": "protocol",
+        "passed": true
+      },
+      {
+        "name": "desktop",
+        "passed": true
+      }
+    ],
+    "legacy_recovery_and_reporting_unchanged": true,
+    "no_background_location": true,
+    "no_gestures": true
+  },
+  "exported_source_offline": {
+    "passed": true,
+    "python": {
+      "general": 96,
+      "reconciliation": 141,
+      "platform": 13
+    },
+    "python_total": 250,
+    "helper_state": 41,
+    "helper_storage": 9,
+    "trust_policy": 56,
+    "trust_storage": 14,
+    "window_session": 9,
+    "java_protocol_assertions": 12,
+    "shared_protocol_vector": true,
+    "device_actions": 0,
+    "network_actions": 0
+  }
+}

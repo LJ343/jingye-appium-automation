@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="network_trust_label">敬业：已授权接入点确认</string>
+    <string name="network_trust_description">仅在恢复助手运行、屏幕已解锁、当前接入点由您预先加入白名单时，核对并操作系统无线调试授权框。不会操作其他应用、解锁手机或批准未知接入点；不会上传界面内容。请同时在助手中启用此功能。</string>
+</resources>

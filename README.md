@@ -1,6 +1,6 @@
-# Wireless recovery 0.4
+# Wireless recovery 0.5.3
 
-Bounded automatic retry after wireless-debugging recovery fails to remain enabled is deployed. See [0.4 policy, evidence and limits](docs/WIRELESS_RELEASE_0.4.md), [companion setup](android-companion/README.md), and [wireless status](operations/WIRELESS_STATUS.md). The USB description below is historical; main remains the USB baseline.
+Exact user-enrolled AP confirmation supports Honor wireless-debugging dialogs, with bounded event-driven follow-up and persisted action budgets. See [release, evidence and limits](docs/WIRELESS_RELEASE_0.5.3.md), [setup](android-companion/README.md) and [read-only wireless status](operations/WIRELESS_STATUS.md). main remains the USB baseline; older descriptions below are historical.
 
 # 敬业 Appium 自动化
 

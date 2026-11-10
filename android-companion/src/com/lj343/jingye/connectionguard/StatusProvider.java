@@ -18,7 +18,12 @@ public final class StatusProvider extends ContentProvider {
                 || uri.getQuery() != null) throw new IllegalArgumentException("Only plain /status query is supported");
         MatrixCursor cursor = new MatrixCursor(new String[]{"status"}, 1);
         String state;
-        try { state = new StateStore(getContext()).snapshot(); }
+        try {
+            org.json.JSONObject value = new org.json.JSONObject(new StateStore(getContext()).snapshot());
+            value.put("network_trust", new org.json.JSONObject(new TrustSettings(getContext()).diagnostic()));
+            state = value.toString();
+        }
+        catch (org.json.JSONException failure) { state = "{\"code\":\"DIAGNOSTIC_ENCODING_FAILED\"}"; }
         catch (RuntimeException failure) { state = "{\"code\":\"DIAGNOSTIC_UNAVAILABLE\",\"record_write_result\":\"UNKNOWN\"}"; }
         cursor.addRow(new Object[]{state});
         return cursor;

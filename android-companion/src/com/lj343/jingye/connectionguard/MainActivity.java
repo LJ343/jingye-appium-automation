@@ -28,11 +28,11 @@ public final class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
-        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 0.4"); title.setTextSize(23); layout.addView(title);
+        TextView title = new TextView(this); title.setText("敬业连接恢复助手 · 0.5.3"); title.setTextSize(23); layout.addView(title);
         TextView explanation = new TextView(this);
         explanation.setText("默认不启用。只有您点击开始后，助手才会尝试恢复无线调试。\n\n"
                 + "启用期间，系统关闭无线调试后可能被恢复；要手动保持关闭，请先暂停并停止助手。"
-                + "遇到未信任网络仍需系统确认，助手不自动批准。\n\n"
+                + "系统网络确认默认人工处理。可另行登记具体接入点并启用白名单自动确认；未知接入点仍须您决定。\n\n"
                 + "Wi-Fi 稳定后尝试恢复。开启未保持时，退避 60 秒、120 秒最多再试两次；"
                 + "本轮最多三次写入，重建服务不会补充预算或跳过退避。连续失败后停止写入并显示原因。"
                 + "开关持续开启 30 秒后才接受下一次独立故障；外部开启也须稳定 30 秒。"
@@ -55,6 +55,7 @@ public final class MainActivity extends Activity {
         }, this::operationFailed));
         addButton(layout, "系统应用设置", v -> FailureBoundary.run(() -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName()))), this::operationFailed));
+        new TrustSetup(this).addButtons(layout);
         stateView = new TextView(this); stateView.setTextIsSelectable(true); layout.addView(stateView);
         ScrollView scroll = new ScrollView(this); scroll.addView(layout); setContentView(scroll);
     }
@@ -79,6 +80,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(request, permissions, grants);
+        if (request == TrustSetup.LOCATION_REQUEST) { showToast("权限由系统决定；请重新点击登记当前接入点核实"); return; }
         if (request == NOTIFICATION_REQUEST && grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) requestStart();
         else if (request == NOTIFICATION_REQUEST) showToast("未允许通知，未发送开始指令");
     }
@@ -94,6 +96,7 @@ public final class MainActivity extends Activity {
         try { reporting = ReporterSettings.load(this) == null ? "地址上报尚未配置" : "地址上报已配置；电脑连接仍需单独核验"; }
         catch (RuntimeException ignored) { }
         return GuardService.statusText(code) + "\n\n以下为最近上报，系统强制结束后可能过时；不代表电脑已连接。\n"
-                + snapshot + "\n\n" + reporting + "\n\n最近状态（最多 40 条）\n" + store.history();
+                + snapshot + "\n\n" + reporting + "\n\n接入点自动确认（点击发送不等于电脑已连接）\n"
+                + new TrustSettings(this).diagnostic() + "\n\n最近状态（最多 40 条）\n" + store.history();
     }
 }
