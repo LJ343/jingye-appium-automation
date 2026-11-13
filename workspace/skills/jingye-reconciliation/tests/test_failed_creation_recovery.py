@@ -16,10 +16,11 @@ TOKEN = 'jingye-'+'a'*32
 
 
 def log(token=TOKEN):
-    body = json.dumps({'capabilities':{'firstMatch':[{}], 'alwaysMatch':{'jingye:ownershipToken':token}}})
+    body = json.dumps({'capabilities':{'firstMatch':[{}], 'alwaysMatch':{'jingye:ownershipToken':token,'appium:udid':'test-phone'}}})
+    command=json.dumps(['-P','5037','-s','test-phone','shell','am','instrument','-w','io.appium.uiautomator2.server.test/androidx.test.runner.AndroidJUnitRunner'])
     return ('[HTTP] --> POST /session '+body+'\n'
             '[driver] Starting UIAutomator2 server 10.2.1\n'
-            '[ADB] shell am instrument -w runner\n'
+            '[ADB] Creating ADB subprocess with args: '+command+'\n'
             '[driver] instrumentation process cannot be initialized\n'
             '[HTTP] <-- POST /session 500 123 ms - 123\n').encode()
 
@@ -35,6 +36,9 @@ class FailedCreationTests(unittest.TestCase):
     def test_exclusive_failed_request_and_status_reads(self):
         result=evidence.audit_suffix(log()+b'[HTTP] --> GET /sessions\n[HTTP] <-- GET /sessions 200\n',TOKEN)
         self.assertTrue(result['terminalFailed']);self.assertTrue(result['instrumentationLaunchObserved'])
+        for raw in [log().replace(b'"-s", "test-phone"',b'"-s", "other-phone"'),
+                    log().replace(b'androidx.test.runner.AndroidJUnitRunner',b'other.Runner')]:
+            self.assertFalse(evidence.audit_suffix(raw,TOKEN)['instrumentationLaunchObserved'])
 
     def test_incomplete_success_foreign_overlap_mutation_and_master_add_rejected(self):
         cases=[log()[:-1],log().replace(b'500 123',b'200 123'),log('other'),log()+log(),

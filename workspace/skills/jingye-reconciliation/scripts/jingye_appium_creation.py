@@ -57,7 +57,18 @@ def audit_suffix(raw, token):
             and ends[0][1] == 500, "creation_failed_terminal_not_proven")
     # Do not treat an arbitrary HTTP 500 or a truncated request as instrumentation failure.
     segment = "\n".join(lines[starts[0]:ends[0][0]+1])
-    launched = "Starting UIAutomator2 server" in segment and "am instrument" in segment
+    launched = False
+    for line in lines[starts[0]:ends[0][0]+1]:
+        command = re.search(r"\[ADB\] Creating ADB subprocess with args: (\[.*\])$", line)
+        if not command:
+            continue
+        args = json.loads(command[1])
+        expected = request["capabilities"]["alwaysMatch"].get("appium:udid")
+        if (isinstance(expected, str) and expected and isinstance(args, list)
+                and args[:8] == ["-P", "5037", "-s", expected, "shell", "am", "instrument", "-w"]
+                and args[-1] == "io.appium.uiautomator2.server.test/androidx.test.runner.AndroidJUnitRunner"
+                and "Starting UIAutomator2 server" in segment):
+            launched = True
     require("instrumentation process cannot be initialized" in segment,
             "creation_failure_not_instrumentation_start")
     return {"terminalFailed": True, "exclusiveRequest": True, "masterNotAdded": True,
