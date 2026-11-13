@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "python": {
+    "passed": true,
+    "python": {
+      "general": 100,
+      "reconciliation": 154,
+      "platform": 13
+    },
+    "total": 267,
+    "business_ast_outside_factory_unchanged": true,
+    "device_actions": 0,
+    "business_runs": 0,
+    "sources": {
+      "yyb_search.py": "9ea16d023a844b4a9c5d3478b039869d6b1e46b8b272d7b71c733eb704d8de38",
+      "jingye_appium_guard.py": "1fd6ed4c9dbc0127d9628fd67bbd314461881c4ee274ebe512d590c4586d0594",
+      "jingye_appium_ownership.py": "d1f2a367106181f8c361db769c8a5025f92246b70981aa2be61beb8c38715fa8",
+      "jingye_appium_creation.py": "4612581d02c76c9eb823dfd3d4f981c467916065726987babc56ecff2eb9c607"
+    }
+  },
+  "deployment": {
+    "passed": true,
+    "host_instances_unchanged": true,
+    "private_business_configuration_unchanged": true,
+    "business_runs": 0
+  },
+  "helper_version": "0.5.3",
+  "live_failure_injection_performed": false
+}

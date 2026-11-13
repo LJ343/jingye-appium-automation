@@ -233,32 +233,32 @@ try:
 finally:
     _config_wb.close()
 
-# DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-# DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "http://192.0.2.1:8000/v1")
+# DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "sk-54b2f9a73745411ca3ed8e014bc2d818")
+# DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "http://192.168.0.88:8000/v1")
 # MODEL_NAME = os.getenv("YYB_MODEL_NAME", "qwen-max") #本地大模型
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "sk-54b2f9a73745411ca3ed8e014bc2d818")
 DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://llm-d795ptikou79i3xy.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")
 MODEL_NAME = os.getenv("YYB_MODEL_NAME", "qwen3.8-flash")
 APPIUM_SERVER_URL = _RUNTIME_ARGS.appium_url
 
 ACCOUNT_LIST = [
-    "10000000004",
-    "10000000012",
-    "10000000008",
-    "10000000003",
-    "10000000010",
-    "10000000002",
-    "10000000001",
-    "10000000011",
-    "10000000009",
-    "10000000006",
-    "10000000007",
+    "13785425706",
+    "19131101393",
+    "17303216664",
+    "13315152228",
+    "18630173675",
+    "13143043608",
+    "13081029913",
+    "18632119185",
+    "18332152825",
+    "15032668617",
+    "15830152319",
 ]
 # ACCOUNT_LIST = [
-#     # "10000000008",
-#     # "10000000004",
-#     # "10000000010",
-#     "10000000007",
+#     # "17303216664",
+#     # "13785425706",
+#     # "18630173675",
+#     "15830152319",
 # ]
 _diagnostic_accounts = [
     value.strip()
@@ -272,25 +272,25 @@ if _diagnostic_accounts:
         flush=True,
     )
 # 上海宾迪特殊账号：采购、销售均需要逐车循环，不能使用“所有车辆”。
-SHANGHAI_SPECIAL_ACCOUNT = "10000000007"
+SHANGHAI_SPECIAL_ACCOUNT = "15830152319"
 SHANGHAI_CARS = [
-    "冀Z00002",
-    "冀Z00003",
-    "冀Z00004",
-    "冀Z00006",
-    "冀Z00008",
-    "冀Z00009",
-    "冀Z00010",
-    "冀Z00011",
-    "冀Z00012",
-    "冀Z00013",
+    "冀A03744D",
+    "冀A04431D",
+    "冀A04541D",
+    "冀A32441D",
+    "冀A44034D",
+    "冀A44301D",
+    "冀A44331D",
+    "冀A44351D",
+    "冀A44439D",
+    "冀A44873D",
 ]
 # SHANGHAI_CARS = [
-#     # "冀Z00006",
-#     "冀Z00008",
+#     # "冀A32441D",
+#     "冀A44034D",
 # ]
 
-ADB_SERIAL = os.getenv("ADB_SERIAL", "YOUR_USB_ADB_SERIAL")
+ADB_SERIAL = os.getenv("ADB_SERIAL", "AGQVVB2B08014709")
 PHONE_PDF_GLOB = "/storage/emulated/0/Download/HonorBrowser/*.pdf"
 # =======================================================
 
@@ -482,6 +482,9 @@ def create_appium_session(reason, max_attempts=2):
             options.set_capability("appium:suppressKillServer", True)
             options.set_capability("appium:newCommandTimeout", 0)
             options.set_capability("appium:ignoreHiddenApiPolicyError", True)
+            # Keep the explicitly enabled network-trust helper available while
+            # UiAutomation is running. USB behavior is unchanged.
+            options.set_capability("appium:disableSuppressAccessibilityService", True)
             try:
                 reservation = appium_guard.begin(APPIUM_SERVER_URL)
             except appium_guard.GuardError as exc:
@@ -508,6 +511,7 @@ def create_appium_session(reason, max_attempts=2):
                 # UiA2 session when transport changes before ownership capture.
                 options.set_capability(appium_phone.OWNERSHIP_CAPABILITY, phone_owner.creation_token)
                 client = AppiumClientConfig(remote_server_addr=APPIUM_SERVER_URL, timeout=260, keep_alive=True)
+                phone_owner.begin_remote()
                 remote_attempted = True
                 candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options, client_config=client)
                 candidate._jingye_guard_reservation = reservation
@@ -559,6 +563,20 @@ def create_appium_session(reason, max_attempts=2):
                         raise AppiumSessionOwnershipError("creation_intent_no_remote_guard_write_failed") from guard_error
                     print("STATUS:YYB_CREATION_INTENT_NO_REMOTE|PHONE_STATE:UNCONFIRMED", flush=True)
                     raise AppiumSessionOwnershipError("creation_intent_no_remote_phone_unconfirmed") from exc
+                # An authoritative failed terminal plus verified physical cleanup
+                # permits the existing bounded creation retry. Lost/ambiguous
+                # outcomes and foreign/active residuals still fail closed.
+                try:
+                    receipt = phone_owner.finish_failed_creation()
+                    reservation.failed_creation_closed(receipt)
+                except Exception:
+                    pass
+                else:
+                    print("STATUS:YYB_CREATION_FAILED_CLEANED|RECONNECT_BEFORE_RETRY", flush=True)
+                    if attempt < max_attempts:
+                        time.sleep(1.5)
+                        continue
+                    break
                 # Remote may have created a server session before its response was lost.
                 _session_creation_outcome_uncertain = True
                 try:
@@ -5609,7 +5627,7 @@ def run_shanghai_sales_stage_with_recovery(phone):
 
 
 def run_shanghai_special_flow(phone):
-    """10000000007：采购和销售均按 10 辆车逐车循环。"""
+    """15830152319：采购和销售均按 10 辆车逐车循环。"""
     print(f"\n\n================ 上海宾迪特殊账号：{phone} ================")
     restart_app_keep_state()
     login_with_account(phone)

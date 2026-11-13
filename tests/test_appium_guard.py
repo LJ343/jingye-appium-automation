@@ -36,6 +36,38 @@ class DurableAppiumGuardTest(unittest.TestCase):
     def guard(self, host=HOST, module=None):
         return (module or self.module).SessionGuard(self.path, URL, host_probe=lambda port: dict(host))
 
+    def failure_receipt(self):
+        return dict(terminalFailed=True,exclusiveRequest=True,masterNotAdded=True,
+                    physicalTerminalVerified=True,processCount=0,instrumentationCount=0,ownedForwardCount=0)
+
+    def test_failed_creation_release_persists_proof_then_permits_new_reservation(self):
+        ticket=self.guard().begin();ticket.failed_creation_closed(self.failure_receipt())
+        value=json.loads(self.path.read_bytes())
+        self.assertIsNone(value['record']);self.assertEqual(value['lastClosed']['state'],'failed_creation_closed')
+        self.guard().begin()
+
+    def test_incomplete_failed_creation_receipt_never_clears_guard(self):
+        ticket=self.guard().begin();before=self.path.read_bytes()
+        for key in self.failure_receipt():
+            receipt=self.failure_receipt();receipt.pop(key)
+            with self.subTest(key=key),self.assertRaises(self.module.GuardError):ticket.failed_creation_closed(receipt)
+            self.assertEqual(self.path.read_bytes(),before)
+
+    def test_failed_creation_release_refuses_active_other_host_or_other_owner(self):
+        ticket=self.guard().begin();ticket.created(SID)
+        with self.assertRaises(self.module.GuardError):ticket.failed_creation_closed(self.failure_receipt())
+        self.path.unlink();ticket=self.guard().begin()
+        ticket.guard.host_probe=lambda _:{**HOST,'pid':999}
+        with self.assertRaises(self.module.GuardError):ticket.failed_creation_closed(self.failure_receipt())
+        ticket.guard.host_probe=lambda _:HOST;ticket.owner='0'*32
+        with self.assertRaises(self.module.GuardError):ticket.failed_creation_closed(self.failure_receipt())
+
+    def test_failed_creation_release_write_error_preserves_unresolved_marker(self):
+        ticket=self.guard().begin();before=self.path.read_bytes()
+        with patch.object(ticket.guard,'_write',side_effect=self.module.GuardError('write')):
+            with self.assertRaises(self.module.GuardError):ticket.failed_creation_closed(self.failure_receipt())
+        self.assertEqual(self.path.read_bytes(),before)
+
     def test_active_record_blocks_fresh_module_instance_same_host(self):
         ticket = self.guard().begin()
         ticket.created(SID)

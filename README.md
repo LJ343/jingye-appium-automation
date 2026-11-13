@@ -1,3 +1,7 @@
+# Desktop wireless creation recovery — 2026-11-13
+
+Completed failed UiA2 startup can now recover only after exclusive-request, exact-process and physical-cleanup evidence. See [repair and limits](docs/WIRELESS_CREATION_RECOVERY_20261113.md). Helper APK remains 0.5.3; USB main is preserved. Older descriptions below are historical.
+
 # Wireless recovery 0.5.3
 
 Exact user-enrolled AP confirmation supports Honor wireless-debugging dialogs, with bounded event-driven follow-up and persisted action budgets. See [release, evidence and limits](docs/WIRELESS_RELEASE_0.5.3.md), [setup](android-companion/README.md) and [read-only wireless status](operations/WIRELESS_STATUS.md). main remains the USB baseline; older descriptions below are historical.

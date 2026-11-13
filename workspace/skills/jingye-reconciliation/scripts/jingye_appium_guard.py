@@ -96,6 +96,9 @@ class Reservation:
     def closed(self):
         self.guard.closed(self)
 
+    def failed_creation_closed(self, receipt):
+        self.guard.failed_creation_closed(self, receipt)
+
 
 class SessionGuard:
     def __init__(self, path, server_url, *, host_probe=None):
@@ -265,6 +268,24 @@ class SessionGuard:
                      and self._current_host() == reservation.host == record["host"],
                      "appium_guard_close_not_proven_for_same_host")
             value["lastClosed"] = {**record, "state": "closed", "closedAtUtc": _now()}
+            value["record"] = None
+            self._write(value)
+
+    def failed_creation_closed(self, reservation, receipt):
+        _require(isinstance(receipt, dict) and all(receipt.get(k) is True for k in
+                 ("terminalFailed", "exclusiveRequest", "masterNotAdded", "physicalTerminalVerified"))
+                 and all(type(receipt.get(k)) is int and receipt[k] == 0 for k in
+                         ("processCount", "instrumentationCount", "ownedForwardCount")),
+                 "appium_guard_failed_creation_proof_missing")
+        with self._lock():
+            value = self._read()
+            record = self._owned(value, reservation)
+            _require(record["state"] in {"creating", "creation_unknown"} and record["sessionId"] is None
+                     and record["scope"] == "host"
+                     and self._current_host() == reservation.host == record["host"],
+                     "appium_guard_failed_creation_host_or_state_changed")
+            value["lastClosed"] = {**record, "state": "failed_creation_closed", "closedAtUtc": _now(),
+                                   "cleanupReceipt": receipt}
             value["record"] = None
             self._write(value)
 

@@ -5,10 +5,12 @@ from contextlib import nullcontext
 import importlib.util
 from pathlib import Path
 import shlex
+import sys
 from types import SimpleNamespace
 import unittest
 
 SOURCE = Path(__file__).resolve().parents[1] / "scripts/jingye_appium_ownership.py"
+sys.path.insert(0, str(SOURCE.parent))
 spec = importlib.util.spec_from_file_location("phone_ownership_under_test", SOURCE)
 owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
 PACKAGE = "io.appium.uiautomator2.server"

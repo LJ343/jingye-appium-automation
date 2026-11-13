@@ -15,6 +15,7 @@ import socket
 import subprocess
 import uuid
 from urllib.parse import urlsplit
+import jingye_appium_creation as creation
 
 
 PACKAGES = frozenset({"io.appium.uiautomator2.server", "io.appium.uiautomator2.server.test"})
@@ -273,6 +274,22 @@ class PhoneOwnership:
         self.stopped = set()
         self.session_id = None
         self.cleanup_receipt = {}
+        self.failure_witness = None
+        self.failure_witness_error = None
+
+    def begin_remote(self):
+        """Optional evidence, collected after idle prepare and before Remote.
+
+        A missing/unreadable log does not prevent an ordinary healthy creation;
+        it prevents automatic release/retry of a failed creation.
+        """
+        _require(self.initial is not None and not self.initial["processes"]
+                 and not self.initial["instruments"], "phone_failure_baseline_missing")
+        try:
+            self.failure_witness = creation.FailureWitness(
+                self.host, self.host_probe, self.port, self.creation_token)
+        except Exception:
+            self.failure_witness_error = "creation_log_checkpoint_unavailable"
 
     def _host_same(self):
         _require(self.host_probe(self.port) == self.host, "phone_owner_appium_host_changed")
@@ -355,7 +372,7 @@ class PhoneOwnership:
         _require(listeners[0]["inode"] in sockets, "phone_socket_pid_unverified")
         return listeners[0]
 
-    def _prove_changed_creation(self, snapshot, deadline):
+    def _prove_changed_creation(self, snapshot, deadline, *, failed_empty=False):
         serial = snapshot["serial"]; target = snapshot["processes"][0]
         # Reserve the final ten seconds of the same operation budget for removal
         # of the one known-created proof forward. No command resets that budget.
@@ -375,13 +392,21 @@ class PhoneOwnership:
             rows = parse_forwards(self._command(serial, ["forward", "--list"], proof_deadline))
             _require(rows.count(entry) == 1 and sum(row[1] == entry[1] for row in rows) == 1,
                      "phone_proof_forward_scope_changed")
-            session = session_token_identity(read_sessions_json(port, proof_deadline, self.client.clock), self.creation_token)
+            response = read_sessions_json(port, proof_deadline, self.client.clock)
+            if failed_empty:
+                _require(self.failure_witness is not None, "phone_failure_witness_missing")
+                self.failure_witness.verify()
+                _require(creation.empty_sessions(response), "phone_failed_creation_downstream_not_empty")
+                session = None
+            else:
+                session = session_token_identity(response, self.creation_token)
             _require(self._socket_owner(serial, target, proof_deadline) == before_socket, "phone_proof_socket_changed")
             after = self._snapshot(proof_deadline)
             _require(after["serial"] == serial and after["processes"] == snapshot["processes"]
                      and after["instruments"] == snapshot["instruments"], "phone_creation_snapshot_changed")
-            return {"method": "server_session_token_and_pid_socket", "downstreamSessionId": session,
-                    "tokenVerified": True, "socket": before_socket, "stableSnapshotVerified": True}
+            return {"method": "exclusive_failed_request_empty_server_pid_socket" if failed_empty
+                            else "server_session_token_and_pid_socket", "downstreamSessionId": session,
+                    "tokenVerified": not failed_empty, "socket": before_socket, "stableSnapshotVerified": True}
         finally:
             # Remove only the precise mapping whose successful creation is known.
             # Unknown allocation or changed scope never permits a blanket remove.
@@ -395,6 +420,80 @@ class PhoneOwnership:
             rows = parse_forwards(self._command(serial, ["forward", "--list"], deadline, global_command=True))
             _require(not any(row[1] == entry[1] for row in rows), "phone_proof_forward_cleanup_unverified")
             self.proof_forward["removed"] = True
+
+    def finish_failed_creation(self):
+        """Only a completed, exclusive failed request can use this path.
+
+        This deliberately does not call capture with a fabricated session ID.
+        No result is inferred from an exception string or a /status response.
+        A checkpointed idle phone, exact request token in the same host's log,
+        failed terminal and absence of any competing mutations establish the
+        launch scope. The verified empty downstream server must also belong to
+        the exact stable process/socket. Normal active sessions still require
+        capture token + explicit quit via finish_after_quit.
+        """
+        _require(self.initial is not None and self.owned is None and self.session_id is None
+                 and self.failure_witness is not None, "phone_failure_witness_missing")
+        receipt = self.failure_witness.verify()
+        with self._operation(budget=300) as deadline:
+            while True:
+                try:
+                    snapshot = self._snapshot(deadline)
+                    break
+                except CreationReadTransportError:
+                    _require(self.client.clock() < deadline, "phone_owner_budget_exhausted")
+                    self.client.sleep(min(0.5, deadline-self.client.clock()))
+            self.failure_witness.verify()
+            new_forwards = [r for r in snapshot["forwards"] if r not in self.initial["forwards"]]
+            _require(all(r[0] == self.creation_transport and r[2] == "tcp:6790" for r in new_forwards),
+                     "phone_failed_creation_forward_scope_unknown")
+            if snapshot["processes"] or snapshot["instruments"]:
+                _require(receipt["instrumentationLaunchObserved"]
+                         and len(snapshot["processes"]) == len(snapshot["instruments"]) == 1
+                         and snapshot["processes"][0]["name"] == "io.appium.uiautomator2.server"
+                         and snapshot["instruments"][0]["component"].split("/", 1)[0]
+                             == "io.appium.uiautomator2.server.test"
+                         and snapshot["instruments"][0]["finished"] is False
+                         and snapshot["instruments"][0]["processCount"] == 1,
+                         "phone_failed_creation_residual_unverified")
+                self._prove_changed_creation(snapshot, deadline, failed_empty=True)
+                _require(self._snapshot(deadline) == snapshot, "phone_failed_creation_snapshot_changed")
+                self.failure_witness.verify()
+                self.owned = {**snapshot, "forwards": new_forwards}
+                for row in snapshot["processes"]:
+                    key = (row["pid"], row["uid"], row["startTicks"], row["name"])
+                    _require(key not in self.stopped, "phone_owned_stop_already_attempted")
+                    self.stopped.add(key)  # Never replay a signal after a lost response.
+                    self._host_same()
+                    serial = self.client._ensure(deadline)
+                    _require(serial == snapshot["serial"], "phone_endpoint_changed_before_stop")
+                    output = self._command(serial, ["shell", "run-as", row["name"], "sh", "-c",
+                        shlex.quote(stop_script(row))], deadline)
+                    _require(output.strip() in {"OWNED_SIGNAL_SENT", "OWNED_ALREADY_GONE"},
+                             "phone_owned_stop_unconfirmed")
+            end = min(deadline, self.client.clock()+12)
+            while True:
+                current = self._snapshot(deadline)
+                if self.owned is not None:
+                    self._known_residual(current)
+                else:
+                    _require(not current["processes"] and not current["instruments"],
+                             "phone_failed_creation_new_process")
+                remaining = [r for r in current["forwards"] if r not in self.initial["forwards"]]
+                _require(all(r in new_forwards for r in remaining), "phone_failed_creation_new_forward")
+                if not current["processes"] and not current["instruments"]:
+                    for row in remaining:
+                        _require(row[0] == current["serial"], "phone_failed_creation_stale_forward")
+                        self.failure_witness.verify()
+                        self._command(current["serial"], ["forward", "--remove", row[1]], deadline)
+                    if not remaining:
+                        self.failure_witness.verify()
+                        self.cleanup_receipt = {**receipt, "physicalTerminalVerified": True,
+                            "processCount": 0, "instrumentationCount": 0, "ownedForwardCount": 0,
+                            "signalsAttempted": len(self.stopped)}
+                        return self.cleanup_receipt
+                _require(self.client.clock() < end, "phone_failed_creation_cleanup_unconfirmed")
+                self.client.sleep(min(0.5, end-self.client.clock()))
 
     def capture(self, session_id):
         _require(self.initial is not None and self.owned is None and isinstance(session_id, str)

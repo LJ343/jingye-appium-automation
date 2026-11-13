@@ -26,7 +26,7 @@ def main():
     counts={}
     for name,path in [('general','tests'),('reconciliation','workspace/skills/jingye-reconciliation/tests'),('platform','workspace/skills/jingye-platform-sync/tests')]:
         counts[name]=json.loads(run([sys.executable,'-B','-X','utf8',__file__,'--suite',path]))['tests']
-    assert counts=={'general':96,'reconciliation':141,'platform':13}
+    assert counts=={'general':100,'reconciliation':154,'platform':13}
     java_home=Path(os.environ.get('JAVA_HOME',r'C:\Program Files\Java\jdk-25.0.3'))
     javac=java_home/'bin/javac.exe';java=java_home/'bin/java.exe'
     companion=ROOT/'android-companion';source=companion/'src/com/lj343/jingye/connectionguard'
