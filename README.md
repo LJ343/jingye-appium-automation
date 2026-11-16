@@ -1,3 +1,7 @@
+# Desktop unresolved-cleanup reconciliation — 2026-11-16
+
+A later run can now archive a known cleanup marker only after fresh dead-client, terminal-session, empty-host and same-phone physical-idle evidence. See [repair and limits](docs/WIRELESS_CLEANUP_RECONCILIATION_20261116.md). Helper remains 0.5.3; USB main is preserved. Older dated descriptions below are historical.
+
 # Desktop wireless creation recovery — 2026-11-13
 
 Completed failed UiA2 startup can now recover only after exclusive-request, exact-process and physical-cleanup evidence. See [repair and limits](docs/WIRELESS_CREATION_RECOVERY_20261113.md). Helper APK remains 0.5.3; USB main is preserved. Older descriptions below are historical.

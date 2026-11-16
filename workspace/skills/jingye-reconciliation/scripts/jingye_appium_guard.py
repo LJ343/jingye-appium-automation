@@ -2,8 +2,9 @@
 
 Import performs no I/O. Only the wireless session factory calls begin(). A
 successful master-list removal or /status response never clears this journal.
-Records are cleared only after the caller's explicit quit returned normally,
-and only for the same PID/creation-time host and reservation owner.
+Ordinary closure requires the caller's explicit quit and the same host/owner.
+A known cleanup_uncertain record may also be archived across clients, under
+the canonical lock, after fresh terminal-session and physical-idle proof.
 """
 from __future__ import annotations
 
@@ -289,6 +290,29 @@ class SessionGuard:
             value["record"] = None
             self._write(value)
 
+    def reconcile_cleanup(self, prover):
+        """Archive only a known cleanup record with fresh read-only idle proof."""
+        with self._lock():
+            value=self._read();record=value['record'];host=self._current_host()
+            _require(record is not None and record['state']=='cleanup_uncertain'
+                     and record['scope']=='host' and record['host']==host
+                     and isinstance(record.get('sessionId'),str)
+                     and re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',record['sessionId']),
+                     'appium_guard_cleanup_reconciliation_not_eligible')
+            proof=prover(json.loads(json.dumps(record)),dict(host))
+            _require(isinstance(proof,dict) and all(proof.get(k) is True for k in
+                     ('originalClientGone','masterLogIdle','exactSessionTerminal','samePhoneVerified'))
+                     and type(proof.get('physicalIdleObservations')) is int and proof['physicalIdleObservations']==2
+                     and all(type(proof.get(k)) is int and proof[k]==0 for k in
+                             ('processCount','instrumentationCount','forwardCount')),
+                     'appium_guard_cleanup_reconciliation_proof_missing')
+            _require(self._current_host()==host and self._read()==value,
+                     'appium_guard_cleanup_reconciliation_state_changed')
+            value['history'].append(dict(event='cleanup_reconciled_after_verified_idle',atUtc=_now(),previousRecord=record,proof=proof))
+            value['lastClosed']={**record,'state':'cleanup_reconciled','closedAtUtc':_now(),'proof':proof}
+            value['record']=None;self._write(value)
+            return proof
+
 
 def begin(server_url):
     """Use the wireless JSON's directory, or its explicit appium_guard_path."""
@@ -306,6 +330,21 @@ def begin(server_url):
         explicit = config.get("appium_guard_path")
         _require(explicit is None or isinstance(explicit, str) and explicit, "appium_guard_config_invalid")
         guard_path = Path(explicit) if explicit else path.parent / f"appium-session-guard-{port}.json"
-        return SessionGuard(guard_path, server_url).begin()
+        guard=SessionGuard(guard_path,server_url)
+        try:
+            return guard.begin()
+        except GuardError as original:
+            if original.code!='appium_guard_same_host_unresolved':raise
+            from jingye_appium_reconcile import prove_cleanup_idle
+            import jingye_wireless as link
+            try:
+                guard.reconcile_cleanup(lambda record,host:prove_cleanup_idle(guard,link,record,host))
+            except GuardError as exc:
+                if exc.code=='appium_guard_cleanup_reconciliation_not_eligible':raise original from exc
+                raise GuardError('appium_guard_cleanup_reconciliation_unconfirmed') from exc
+            except Exception as exc:
+                raise GuardError('appium_guard_cleanup_reconciliation_unconfirmed') from exc
+            print('STATUS:APPIUM_PREVIOUS_CLEANUP_RECONCILED|PHONE_IDLE:VERIFIED',flush=True)
+            return guard.begin()
     except (OSError, ValueError, TypeError):
         raise GuardError("appium_guard_config_unreadable_or_invalid") from None

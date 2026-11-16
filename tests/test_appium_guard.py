@@ -40,6 +40,79 @@ class DurableAppiumGuardTest(unittest.TestCase):
         return dict(terminalFailed=True,exclusiveRequest=True,masterNotAdded=True,
                     physicalTerminalVerified=True,processCount=0,instrumentationCount=0,ownedForwardCount=0)
 
+    def cleanup_proof(self):
+        return dict(originalClientGone=True,masterLogIdle=True,exactSessionTerminal=True,samePhoneVerified=True,
+                    physicalIdleObservations=2,processCount=0,instrumentationCount=0,forwardCount=0)
+
+    def cleanup_ticket(self):
+        guard=self.guard();ticket=guard.begin();ticket.created(SID);ticket.uncertain('cleanup_uncertain');return guard,ticket
+
+    def test_cleanup_reconciliation_archives_then_allows_new_reservation(self):
+        guard,ticket=self.cleanup_ticket();guard.reconcile_cleanup(lambda r,h:self.cleanup_proof())
+        value=json.loads(self.path.read_bytes());self.assertIsNone(value['record'])
+        self.assertEqual(value['history'][-1]['previousRecord']['sessionId'],SID)
+        self.assertEqual(value['lastClosed']['state'],'cleanup_reconciled');guard.begin()
+
+    def test_cleanup_reconciliation_refuses_active_unknown_unbound_or_no_session(self):
+        for state,scope,sid in [('active','host',SID),('creation_unknown','host',SID),('cleanup_uncertain','unbound',SID),('cleanup_uncertain','host',None)]:
+            if self.path.exists():self.path.unlink()
+            guard,ticket=self.cleanup_ticket();value=guard._read();value['record'].update(state=state,scope=scope,sessionId=sid);guard._write(value)
+            before=self.path.read_bytes();prover=Mock()
+            with self.assertRaises(self.module.GuardError):guard.reconcile_cleanup(prover)
+            prover.assert_not_called();self.assertEqual(self.path.read_bytes(),before)
+
+    def test_cleanup_reconciliation_missing_proof_or_storage_failure_keeps_marker(self):
+        guard,ticket=self.cleanup_ticket();before=self.path.read_bytes()
+        for key in self.cleanup_proof():
+            proof=self.cleanup_proof();proof.pop(key)
+            with self.assertRaises(self.module.GuardError):guard.reconcile_cleanup(lambda r,h:proof)
+            self.assertEqual(self.path.read_bytes(),before)
+        with patch.object(guard,'_write',side_effect=self.module.GuardError('write')):
+            with self.assertRaises(self.module.GuardError):guard.reconcile_cleanup(lambda r,h:self.cleanup_proof())
+        self.assertEqual(self.path.read_bytes(),before)
+
+    def test_cleanup_reconciliation_rechecks_same_host_and_marker(self):
+        guard,ticket=self.cleanup_ticket();before=self.path.read_bytes()
+        def change(record,host):
+            guard.host_probe=lambda _:{**HOST,'pid':999};return self.cleanup_proof()
+        with self.assertRaises(self.module.GuardError):guard.reconcile_cleanup(change)
+        self.assertEqual(self.path.read_bytes(),before)
+
+    def test_cleanup_reconciliation_prover_failure_preserves_bytes(self):
+        guard,ticket=self.cleanup_ticket();before=self.path.read_bytes()
+        with self.assertRaises(RuntimeError):guard.reconcile_cleanup(Mock(side_effect=RuntimeError('phone offline')))
+        self.assertEqual(self.path.read_bytes(),before)
+
+    def run_configured_begin(self,prover):
+        from types import SimpleNamespace
+        cfg=self.path.parent/'wireless.json';cfg.write_text(json.dumps({'appium_guard_path':str(self.path)}))
+        with patch.dict(os.environ,{'JINGYE_WIRELESS_ENABLED':'1','JINGYE_WIRELESS_CONFIG':str(cfg)}),\
+             patch.object(self.module,'query_local_host',return_value=HOST),\
+             patch.dict(sys.modules,{'jingye_appium_reconcile':SimpleNamespace(prove_cleanup_idle=prover),'jingye_wireless':SimpleNamespace()}),\
+             patch('builtins.print'):
+            return self.module.begin(URL)
+
+    def test_configured_begin_reconciles_known_cleanup_then_reserves_new_owner(self):
+        guard,ticket=self.cleanup_ticket();old=ticket.owner;prover=Mock(return_value=self.cleanup_proof())
+        new=self.run_configured_begin(prover)
+        self.assertNotEqual(new.owner,old);self.assertEqual(guard._read()['record']['state'],'creating')
+        self.assertEqual(guard._read()['history'][-1]['previousRecord']['owner'],old);prover.assert_called_once()
+
+    def test_configured_begin_normal_active_and_unknown_do_not_run_reconciler(self):
+        prover=Mock();ticket=self.run_configured_begin(prover);prover.assert_not_called()
+        ticket.created(SID)
+        with self.assertRaises(self.module.GuardError):self.run_configured_begin(prover)
+        prover.assert_not_called();ticket.uncertain('creation_unknown')
+        with self.assertRaises(self.module.GuardError):self.run_configured_begin(prover)
+        prover.assert_not_called()
+
+    def test_configured_begin_failed_proof_keeps_original_marker(self):
+        guard,ticket=self.cleanup_ticket();before=self.path.read_bytes()
+        with self.assertRaises(self.module.GuardError) as caught:
+            self.run_configured_begin(Mock(side_effect=RuntimeError('proof missing')))
+        self.assertEqual(caught.exception.code,'appium_guard_cleanup_reconciliation_unconfirmed')
+        self.assertEqual(self.path.read_bytes(),before)
+
     def test_failed_creation_release_persists_proof_then_permits_new_reservation(self):
         ticket=self.guard().begin();ticket.failed_creation_closed(self.failure_receipt())
         value=json.loads(self.path.read_bytes())

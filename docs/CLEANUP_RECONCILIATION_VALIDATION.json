@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "python": {
+    "passed": true,
+    "python": {
+      "general": 108,
+      "reconciliation": 175,
+      "platform": 13
+    },
+    "python_total": 296,
+    "helper_state": 41,
+    "helper_storage": 9,
+    "trust_policy": 56,
+    "trust_storage": 14,
+    "window_session": 9,
+    "java_protocol_assertions": 12,
+    "shared_protocol_vector": true,
+    "device_actions": 0,
+    "network_actions": 0,
+    "changed_files": {
+      "tests/run_offline_export.py": "modified",
+      "tests/test_appium_guard.py": "modified",
+      "workspace/skills/jingye-reconciliation/scripts/jingye_appium_guard.py": "modified",
+      "workspace/skills/jingye-reconciliation/scripts/jingye_appium_reconcile.py": "added",
+      "workspace/skills/jingye-reconciliation/tests/test_cleanup_reconciliation.py": "added"
+    },
+    "sources": {
+      "jingye_appium_guard.py": "f6ad360b880669d589f188c67e79841c17dec6dd4b29270e30b723bc667c3ef8",
+      "jingye_appium_reconcile.py": "1c5f289a0734cef561879752b76be4ffbbb35b874780e3eacd0250e343353a4c"
+    },
+    "production_business_sources_unchanged": true,
+    "historical_lifecycle_replay": true,
+    "live_fault_injection": false,
+    "business_runs": 0
+  },
+  "deployment": {
+    "passed": true,
+    "host_instances_unchanged": true,
+    "private_business_configuration_unchanged": true,
+    "other_python_sources_unchanged": true,
+    "canonical_journal_bytes_unchanged": true,
+    "live_readonly_idle_proof": true,
+    "business_runs": 0
+  },
+  "helper_version": "0.5.3",
+  "live_failure_injection_performed": false
+}
