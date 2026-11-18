@@ -116,12 +116,13 @@ class Handshake:
 
 
 class AddressReceiver:
-    def __init__(self, config):
+    def __init__(self, config, *, pairing=None):
         self.config = config
         self.protocol = Handshake(config)
         self.sock = None
         self.thread = None
         self.closed = threading.Event()
+        self.pairing = pairing
 
     def start(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -147,10 +148,18 @@ class AddressReceiver:
     def _serve(self):
         while not self.closed.is_set():
             try:
-                packet, source = self.sock.recvfrom(MAX_PACKET + 1)
+                packet, source = self.sock.recvfrom(1025 if self.pairing is not None else MAX_PACKET + 1)
+                if self.pairing is not None and packet.startswith(b"JYPAIR1|"):
+                    self.pairing.handle(packet, source)
+                    continue
+                previous = self.protocol.accepted
                 reply = self.protocol.handle(packet, source)
                 if reply is not None:
                     self.sock.sendto(reply, source)
+                if self.pairing is not None and self.protocol.accepted != previous:
+                    request = self.pairing.request(source)
+                    if request is not None:
+                        self.sock.sendto(request, source)
             except socket.timeout:
                 continue
             except OSError:

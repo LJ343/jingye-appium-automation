@@ -1,3 +1,7 @@
+# 0.6.0 candidate: automatic re-pairing and Wi-Fi-name trust
+
+Candidate only: offline checks and signed APK build passed; HONOR live acceptance is pending. Production `wireless/unattended-20261104` remains at `c020802850710ad6b0d44d4b984da549226b4eea`; USB `main` is unchanged. Read [setup and acceptance limits](docs/WIRELESS_RELEASE_0.6.0.md) before enabling.
+
 # Desktop unresolved-cleanup reconciliation — 2026-11-16
 
 A later run can now archive a known cleanup marker only after fresh dead-client, terminal-session, empty-host and same-phone physical-idle evidence. See [repair and limits](docs/WIRELESS_CLEANUP_RECONCILIATION_20261116.md). Helper remains 0.5.3; USB main is preserved. Older dated descriptions below are historical.
