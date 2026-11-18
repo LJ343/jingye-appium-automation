@@ -1,8 +1,9 @@
 """Opt-in, identity-checked wireless ADB transport; importing performs no I/O.
 
 Only JINGYE_WIRELESS_ENABLED=1 enables the module. JINGYE_WIRELESS_CONFIG
-points to a non-secret JSON config. No service restart, pairing, app actions,
-session creation, or business replay is performed here.
+points to a private JSON config. Optional pairing recovery requires independent
+phone approval, a pinned host key, and an authenticated phone-address channel.
+No service restart, Appium session creation, or business replay is performed here.
 The fixed binary and daemon version are checked before CLI calls. An external
 replacement between a check and execution remains a TOCTOU boundary.
 """
@@ -162,6 +163,17 @@ class WirelessADB:
         self._saved_endpoint = None
         self._discovery_addresses = None
         self._last_heartbeat = float("-inf")
+        self._pair_exchange = None
+        self._pair_auth_failure = False
+        self._pair_auth_ips = set()
+        self._pair_attempted = False
+        pairing = self.config.get("pairing_recovery") or {}
+        if pairing.get("enabled") is True:
+            try:
+                from jingye_wireless_pairing import validate
+                validate(pairing)
+            except (OSError, ValueError, TypeError, ImportError):
+                raise ConnectionUnavailable("wireless_pairing_config_or_host_key_invalid") from None
         self._verify_binary()
 
     def _verify_binary(self):
@@ -189,6 +201,10 @@ class WirelessADB:
             self._address_receiver = None
             self._address_receiver_attempted = False
             self._reported_ip = None
+            self._pair_exchange = None
+            self._pair_auth_failure = False
+            self._pair_auth_ips = set()
+            self._pair_attempted = False
             try:
                 if receiver is not None:
                     receiver.close()
@@ -207,7 +223,7 @@ class WirelessADB:
         except OSError:
             raise ConnectionUnavailable("wireless_log_unavailable") from None
 
-    def _exec(self, args, timeout, *, capture_output=True, text=True, deadline=None):
+    def _exec(self, args, timeout, *, capture_output=True, text=True, deadline=None, input_text=None):
         # One command budget includes binary verification, version probe and CLI.
         # A positive API max_wait is a shared deadline, never reset by recovery.
         call_deadline = self.clock() + timeout
@@ -232,9 +248,15 @@ class WirelessADB:
         # A literal remote host also prevents autostart if the daemon disappears
         # after this read. Neither this module nor the probe starts a server.
         options = {"encoding": "utf-8", "errors": "replace"} if text else {}
+        if input_text is not None:
+            if args[:1] != ["pair"] or not text or not re.fullmatch(r"[0-9]{6}\n", input_text):
+                raise ConnectionUnavailable("wireless_pairing_input_invalid")
+            options["input"] = input_text
+        else:
+            options["stdin"] = subprocess.DEVNULL
         return self.runner([self.adb_path, "-H", "127.0.0.1", "-P", "5037", *args],
             timeout=remaining(), check=False, capture_output=capture_output, text=text,
-            stdin=subprocess.DEVNULL, **options)
+            **options)
 
     def _budget(self, deadline):
         if deadline is None:
@@ -259,9 +281,20 @@ class WirelessADB:
         try:
             if connect:
                 result = self._exec(["connect", serial], verification_timeout(), deadline=operation_deadline)
+                if re.search(r"(?i)failed to authenticate|authentication (?:failed|failure)",
+                             _text(result.stdout)+"\n"+_text(getattr(result,"stderr",""))):
+                    if not self._pair_auth_failure:
+                        self._log("adb_authentication_required")
+                    self._pair_auth_failure = True
+                    if _endpoint(serial):
+                        self._pair_auth_ips.add(serial.rsplit(":", 1)[0])
+                    return False
                 if result.returncode:
                     return False
             result = self._exec(["-s", serial, "get-state"], verification_timeout(), deadline=operation_deadline)
+            if _text(result.stdout).strip() == "unauthorized" and _endpoint(serial):
+                self._pair_auth_failure = True
+                self._pair_auth_ips.add(serial.rsplit(":", 1)[0])
             if result.returncode or _text(result.stdout).strip() != "device":
                 return False
             result = self._exec(["-s", serial, "shell", "getprop", "ro.serialno"], verification_timeout(), deadline=operation_deadline)
@@ -287,6 +320,41 @@ class WirelessADB:
             if isinstance(error, ConnectionUnavailable):
                 raise
             return False
+
+    def _try_pairing(self, deadline):
+        if self._pair_exchange is None or self._pair_attempted:
+            return None
+        value = self._pair_exchange.take()
+        if value is None:
+            return None
+        self._pair_attempted = True
+        ip, port, code, connection_port, nonce, expires = value
+        try:
+            from jingye_wireless_pairing import validate, reserve
+            pairing = self.config["pairing_recovery"]
+            validate(pairing)
+            if (not self._pair_auth_failure or ip != self._reported_ip or ip not in self._pair_auth_ips
+                    or not reserve(pairing["ledger_path"], nonce)):
+                self._log("pairing_recovery_blocked")
+                return None
+            self._log("pairing_recovery_attempted")
+            result = self._exec(["pair", f"{ip}:{port}"], min(15, self._budget(deadline)),
+                                deadline=deadline, input_text=code+"\n")
+            if result.returncode != 0 or not re.search(r"(?im)^Successfully paired to ", _text(result.stdout)):
+                self._log("pairing_recovery_failed")
+                return None
+            self._log("pairing_command_succeeded_identity_unverified")
+            endpoint = f"{ip}:{connection_port}"
+            if self._verify(endpoint, connect=True, operation_deadline=deadline):
+                self._log("pairing_recovery_identity_verified")
+                return endpoint
+        except (subprocess.TimeoutExpired, OSError):
+            self._log("pairing_recovery_outcome_unknown_no_replay")
+        except (ValueError, TypeError, ImportError):
+            self._log("pairing_recovery_blocked")
+        finally:
+            code = None
+        return None
 
     def _candidates(self, deadline):
         seen = set()
@@ -317,15 +385,28 @@ class WirelessADB:
             for serial, connect in self._candidates(deadline):
                 previous_serial = self.serial
                 if self._verify(serial, connect=connect, operation_deadline=deadline):
+                    # Do not resume business while an already requested phone UI
+                    # flow can still issue Settings actions. This is recovery-only.
+                    while self._pair_exchange is not None and not self._pair_exchange.settled():
+                        self.sleep(min(0.2,self._budget(deadline)))
                     if serial != previous_serial:
                         self._log("connection_verified")
                     return serial
+            paired = self._try_pairing(deadline)
+            if paired is not None:
+                return paired
             report_config = self.config.get("address_report") or {}
             if report_config.get("enabled") is True and not self._address_receiver_attempted:
                 self._address_receiver_attempted = True
                 try:
                     from jingye_wireless_address import AddressReceiver
-                    self._address_receiver = AddressReceiver(report_config).start()
+                    pairing = self.config.get("pairing_recovery") or {}
+                    if pairing.get("enabled") is True:
+                        from jingye_wireless_pairing import PairExchange
+                        self._pair_exchange = PairExchange(report_config, pairing, clock=self.clock)
+                        self._address_receiver = AddressReceiver(report_config, pairing=self._pair_exchange).start()
+                    else:
+                        self._address_receiver = AddressReceiver(report_config).start()
                     self._log("address_receiver_waiting")
                 except (OSError, ValueError, TypeError, ImportError):
                     self._log("address_receiver_unavailable")
@@ -361,8 +442,15 @@ class WirelessADB:
                     self._log("endpoint_discovery", **report)
                 self.discovery_reason = report.get("reason")
                 if serial and self.serial == serial:
+                    while self._pair_exchange is not None and not self._pair_exchange.settled():
+                        self.sleep(min(0.2,self._budget(deadline)))
                     self._log("connection_verified_by_discovery")
                     return serial
+            # Only concrete authentication failure, after discovery returns, can
+            # authorize a request. Offline/refused/network timeouts never do.
+            if (self._pair_auth_failure and self._reported_ip in self._pair_auth_ips
+                    and self._pair_exchange is not None):
+                self._pair_exchange.authorize()
             now = self.clock()
             if now - self._last_heartbeat >= self.heartbeat:
                 self._log("waiting_for_connection", maxWaitSeconds=self.max_wait,
