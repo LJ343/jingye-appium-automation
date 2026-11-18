@@ -24,6 +24,7 @@ public final class TrustAccessibilityService extends AccessibilityService implem
     private final Handler handler=new Handler(Looper.getMainLooper());
     private TrustSettings settings;
     private TrustGuard guard;
+    private PairingUi pairingUi;
     private final TrustWindowSession session=new TrustWindowSession();
     private int officialWindow=-1;
     private String officialActivity="";
@@ -37,11 +38,16 @@ public final class TrustAccessibilityService extends AccessibilityService implem
     };
     @Override protected void onServiceConnected() {
         super.onServiceConnected(); settings=new TrustSettings(this);guard=new TrustGuard(this);
+        pairingUi=new PairingUi(this);
         stopped=false;connected=true;instance=this;
         FailureBoundary.run(()->{settings.record("ACCESSIBILITY_CONNECTED");captureExisting();},this::fault);
     }
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if(stopped || event==null || settings==null || !TrustGuard.OWNER.contentEquals(event.getPackageName()==null?"":event.getPackageName()))return;
+        if(stopped || event==null || settings==null)return;
+        if(PairingUi.OWNER.contentEquals(event.getPackageName()==null?"":event.getPackageName())){
+            FailureBoundary.run(()->pairingUi.event(),this::fault);return;
+        }
+        if(!TrustGuard.OWNER.contentEquals(event.getPackageName()==null?"":event.getPackageName()))return;
         FailureBoundary.run(()->{
             String name=event.getClassName()==null?"":event.getClassName().toString();
             if(event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.getWindowId()>=0
@@ -89,8 +95,14 @@ public final class TrustAccessibilityService extends AccessibilityService implem
         TrustAccessibilityService service=instance;
         if(service!=null)FailureBoundary.run(service::captureExisting,service::fault);
     }
+    static void beginPairing(PairRecovery.Handle handle){
+        TrustAccessibilityService service=instance;
+        if(service==null){return;}
+        service.handler.post(()->FailureBoundary.run(()->service.pairingUi.start(handle),()->handle.fail(service,"PAIR_SETTINGS_PLATFORM_FAULT")));
+    }
     private void fault() {
         stopped=true;forget();
+        if(pairingUi!=null)FailureBoundary.cleanup(pairingUi::close);
         FailureBoundary.cleanup(()->settings.enable(false),()->settings.record("TRUST_PLATFORM_EXCEPTION"));
     }
     @Override public TrustGuard.Frame inspect() {
@@ -153,7 +165,7 @@ public final class TrustAccessibilityService extends AccessibilityService implem
             }
             if(target==null)return f;
             f.identity=target.identity;
-            f.allowlisted=settings.contains(f.identity.key);
+            f.allowlisted=!"NONE".equals(settings.match(f.identity));
             if(!f.allowlisted)return f;
         } catch(PackageManager.NameNotFoundException absent) { return f; }
         // Count both supported namespaces together; ambiguous titles never fall through.
@@ -190,7 +202,9 @@ public final class TrustAccessibilityService extends AccessibilityService implem
         return sizeA+sizeB==1?(sizeA==1?a.get(0):b.get(0)):null;
     }
     @Override public boolean reserve(TrustGuard.Action action,String identityKey,int windowId) {
-        return settings.reserve(action,identityKey,windowId);
+        TrustGuard.Frame fresh=inspect();
+        return TrustGuard.block(fresh)==null && fresh.window==windowId
+                && fresh.identity.key.equals(identityKey) && settings.reserve(action,fresh.identity,windowId);
     }
     @Override public boolean click(TrustGuard.Action action,TrustGuard.Frame expected) {
         // Re-read the system-bound AP and dialog immediately before the specific node action.
@@ -207,6 +221,6 @@ public final class TrustAccessibilityService extends AccessibilityService implem
         if("ALLOW_CLICK_SENT_PC_UNVERIFIED".equals(code))followingCheckbox=false;
         if(followingCheckbox)post();
     }
-    @Override public void onInterrupt() { forget(); }
-    @Override public void onDestroy() { stopped=true;connected=false;if(instance==this)instance=null;forget();super.onDestroy(); }
+    @Override public void onInterrupt() { forget();if(pairingUi!=null)FailureBoundary.cleanup(pairingUi::close); }
+    @Override public void onDestroy() { stopped=true;connected=false;if(instance==this)instance=null;forget();if(pairingUi!=null)FailureBoundary.cleanup(pairingUi::close);super.onDestroy(); }
 }
