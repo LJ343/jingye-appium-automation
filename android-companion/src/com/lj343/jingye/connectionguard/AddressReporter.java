@@ -90,6 +90,24 @@ final class AddressReporter {
             if (response == null || closed || !enabled) return;
             byte[] answer = response.getBytes(StandardCharsets.US_ASCII);
             socket.send(new DatagramPacket(answer, answer.length));
+            PairSettings pairing=new PairSettings(context);
+            if(!pairing.enabled())return;
+            packet=new DatagramPacket(new byte[385],385);
+            try {socket.receive(packet);}catch(java.net.SocketTimeoutException noPairingRequest){return;}
+            PairProtocol.Request request=PairProtocol.request(java.util.Arrays.copyOf(packet.getData(),packet.getLength()),
+                    config.key,config.id,pairing.fingerprint(),System.currentTimeMillis()/1000,pairing.bootstrapAllowed());
+            if(request==null || closed || !enabled)return;
+            PairRecovery.Handle recovery=PairRecovery.begin(context,config,request,ip);
+            if(recovery==null)return;
+            while(recovery.packet==null && !closed && enabled && SystemClock.elapsedRealtime()<recovery.deadline)
+                Thread.sleep(100);
+            if(recovery.packet==null)recovery.timeout(context);
+            if(closed || !enabled)return;
+            byte[] encrypted=recovery.packet.getBytes(StandardCharsets.US_ASCII);
+            // Same encrypted outcome may be retransmitted; UI actions and code generation never replay.
+            for(int i=0;i<3 && !closed && enabled;i++){
+                socket.send(new DatagramPacket(encrypted,encrypted.length));if(i<2)Thread.sleep(100);
+            }
         } finally { active = null; }
     }
     synchronized void close() {

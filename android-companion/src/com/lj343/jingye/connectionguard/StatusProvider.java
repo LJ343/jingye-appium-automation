@@ -21,6 +21,7 @@ public final class StatusProvider extends ContentProvider {
         try {
             org.json.JSONObject value = new org.json.JSONObject(new StateStore(getContext()).snapshot());
             value.put("network_trust", new org.json.JSONObject(new TrustSettings(getContext()).diagnostic()));
+            value.put("pairing_recovery",new org.json.JSONObject(new PairSettings(getContext()).diagnostic()));
             state = value.toString();
         }
         catch (org.json.JSONException failure) { state = "{\"code\":\"DIAGNOSTIC_ENCODING_FAILED\"}"; }
@@ -37,6 +38,8 @@ public final class StatusProvider extends ContentProvider {
         android.os.Bundle result = new android.os.Bundle();
         if ("configure_address_report".equals(method)) {
             result.putBoolean("configured", ReporterSettings.configure(getContext(), arg));
+        } else if("configure_pairing_host".equals(method)) {
+            result.putBoolean("configured",new PairSettings(getContext()).pin(arg));
         } else if ("clear_address_report".equals(method) && arg == null) {
             result.putBoolean("cleared", getContext().getSharedPreferences(ReporterSettings.PREFS,
                     android.content.Context.MODE_PRIVATE).edit().clear().commit());

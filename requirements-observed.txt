@@ -6,3 +6,5 @@ pillow==12.2.0
 PyMuPDF==1.27.2.3
 requests==2.33.1
 selenium==4.45.0
+# Optional authenticated automatic re-pairing (observed 2026-11-18).
+cryptography==48.0.0
