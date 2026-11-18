@@ -1,0 +1,27 @@
+# 0.6.4 phone helper + pc1 desktop revision
+
+The phone APK is byte-for-byte the same 0.6.4 APK. Already installed users do not reinstall, clear data or register networks again. The desktop revision fixes parsing of ADB pairing success when its stdin prompt and success message share one line. It requires zero exit status, an exact requested pairing endpoint, a bounded recognized reply and no unexpected stderr. It never accepts exit status alone, and separately verifies the physical phone identity. Diagnostic results are fixed categories, never pairing output, addresses or codes.
+
+## Observed acceptance
+
+The natural missing-pairing case was used without deleting trust or synthesizing an authentication error. The helper navigated the official HONOR Settings UI and returned the encrypted one-time code. One real PC pair command ran; the original known-hosts record updated at that time, the dialog closed automatically and the user confirmed the original computer appeared. The original desktop parser reported a failure, so that operation later exhausted its wait budget. Raw pairing stdout was deliberately not retained. Official ADB commandline.cpp prints `Enter pairing code: ` without a newline; stdin-pipe formatting explains the parser defect and is covered by regression tests.
+
+After the desktop fix, a new normal discovery operation connected and independently verified the same phone and exact installed APK. That operation did not need another pairing command. This is observed automatic pairing followed by subsequent normal discovery, not a single-operation post-fix pair-to-connect acceptance. No trust was removed to force a second pair. The fixed parser was exercised offline; no fresh live pairing reply was captured after its correction.
+
+The three connection modules and an additive private pairing configuration were deployed. The accepted persistent attempt ledger was preserved. A post-deployment check through the deployed entry connected on the healthy path without requesting pairing or opening Settings. Existing ADB, Appium and OpenClaw instances and the canonical protection record were unchanged. No Appium session or business run was started. Date rules, account scope, PDF rules, platform uploads, email, cron and WAIT entry were unchanged.
+
+361 Python tests and 294 helper assertions passed, including production UI selectors against synthetic Android trees and encrypted Java/Python interoperability. The unchanged APK, Android source aggregate and existing signing certificate were verified. Real connection-only acceptance does not establish long business completion, locked-screen recovery, natural roaming, future trust persistence or arbitrary system-dialog handling.
+
+## Trust and recovery settings
+
+The original per-AP trust list remains. A separate foreground action registers an exact Wi-Fi name, including case, spaces and Unicode, and explicitly trusts APs using exactly that name. There is no wildcard or automatic network import. Only a digest is stored. Location permission and system location are required to identify the current Wi-Fi. Missing network identity fails closed. Both modes share existing action limits and recheck current network identity before system actions. Installed AP and exact-name settings were verified; an actual network authorization popup under the new name mode was not injected or accepted in this final run.
+
+Automatic re-pairing is opt-in and bound to the original approved computer public-key fingerprint and authenticated address channel. Existing v2 foreground approval from 0.6.2 onward is preserved. Both phone and PC keep two attempts per ten minutes across recreation. Requests expire and are nonce/source/host bound. Codes and pairing endpoints remain transient and use AES-256-GCM plus authentication, then stdin to the pinned ADB executable against the already running server. No key regeneration, clipboard, plaintext code file, global disconnect or service restart is used.
+
+Healthy verified connections use the normal path. Recovery uses existing connections, mDNS, authenticated current addresses, cache and bounded discovery. An explicit authentication rejection, or the enabled repair policy after a completed unsuccessful sweep for the still-fresh authenticated phone address, can request official pairing. A single offline/refused/timeout observation alone is insufficient. Only after a confirmed pair may the exact authenticated offline connection transport be removed and reconnected. The phone must be unlocked, interactive, armed, on an explicitly trusted network and have its accessibility service active. No unlock or bypass of system trust is implemented.
+
+The helper's original idle checks and reporting interval remain unchanged; the 350ms UI follow-ups exist only within a bounded authorized pairing request. Recovery writes remain limited. Trust lists and persisted retry records must be preserved during normal upgrades.
+
+## Installation and integrity
+
+For a new installation, normally cover-update the 0.6.4 APK, retain app data, configure the private authenticated address channel and original host pin locally, register the approved AP or exact Wi-Fi name, enable the accessibility service and opt in to automatic re-pairing. Existing approved 0.6.4 installations need only the desktop revision. Private values, pairing codes, credentials, business logs and signing material are excluded from this release. USB baseline main is unchanged.
