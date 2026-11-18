@@ -20,13 +20,13 @@ def main():
             sys.stderr.write(capture.getvalue());return 2
         print(json.dumps(dict(tests=result.testsRun,passed=True)));return 0
     def run(args):
-        p=subprocess.run([str(a) for a in args],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',timeout=150)
+        p=subprocess.run([str(a) for a in args],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=150)
         if p.returncode:raise RuntimeError(p.stdout+p.stderr)
         return p.stdout
     counts={}
     for name,path in [('general','tests'),('reconciliation','workspace/skills/jingye-reconciliation/tests'),('platform','workspace/skills/jingye-platform-sync/tests')]:
         counts[name]=json.loads(run([sys.executable,'-B','-X','utf8',__file__,'--suite',path]))['tests']
-    assert counts=={'general':108,'reconciliation':175,'platform':13}
+    assert counts=={'general':159,'reconciliation':175,'platform':13},counts
     java_home=Path(os.environ.get('JAVA_HOME',r'C:\Program Files\Java\jdk-25.0.3'))
     javac=java_home/'bin/javac.exe';java=java_home/'bin/java.exe'
     companion=ROOT/'android-companion';source=companion/'src/com/lj343/jingye/connectionguard'
@@ -35,7 +35,7 @@ def main():
         out=Path(temporary)
         def compile_run(name,files,cls,marker):
             classes=out/name;classes.mkdir()
-            run([javac,'--release','17','-encoding','UTF-8','-d',classes,*files])
+            run([javac,'-J-Duser.language=en','-J-Duser.country=US','--release','17','-encoding','UTF-8','-d',classes,*files])
             reply=run([java,'-cp',classes,cls]);assert marker in reply
             return reply
         test_package=tests/'com/lj343/jingye/connectionguard'
@@ -46,13 +46,26 @@ def main():
         compile_run('trust',[*trust,test_package/'TrustGuardTest.java'],package+'TrustGuardTest','ALL 56 TRUST TESTS PASSED')
         compile_run('window',[source/'TrustWindowSession.java',test_package/'TrustWindowSessionTest.java'],package+'TrustWindowSessionTest','ALL 9 WINDOW TESTS PASSED')
         compile_run('trust-storage',[*storage_stubs,*sorted((companion/'trust-test-stubs').rglob('*.java')),*trust,source/'TrustSettings.java',test_package/'TrustSettingsTest.java'],package+'TrustSettingsTest','ALL 14 TRUST STORAGE TESTS PASSED')
+        compile_run('ssid-storage',[*storage_stubs,*sorted((companion/'trust-test-stubs').rglob('*.java')),*trust,source/'TrustSettings.java',test_package/'TrustSettingsTest.java',test_package/'SsidSettingsTest.java'],package+'SsidSettingsTest','ALL 19 SSID STORAGE TESTS PASSED')
+        pairing=[source/'AddressProtocol.java',source/'PairProtocol.java']
+        compile_run('pair-storage',[*storage_stubs,*sorted((companion/'trust-test-stubs').rglob('*.java')),*trust,*pairing,source/'TrustSettings.java',source/'PairSettings.java',test_package/'TrustSettingsTest.java',test_package/'PairSettingsTest.java'],package+'PairSettingsTest','ALL 22 PAIR STORAGE TESTS PASSED')
+        compile_run('pair-ui',[source/'PairUiPolicy.java',test_package/'PairUiPolicyTest.java'],package+'PairUiPolicyTest','ALL 16 PAIR UI TESTS PASSED')
+        node_reply=compile_run('pair-nodes',sorted((companion/'pair-ui-test-stubs').rglob('*.java'))+[source/'PairUiNodes.java',test_package/'PairUiNodesTest.java'],package+'PairUiNodesTest','ALL 34 PAIR NODE TESTS PASSED')
+        entry_reply=compile_run('pair-entry',sorted((companion/'pair-ui-test-stubs').rglob('*.java'))+[source/'PairUiNodes.java',test_package/'PairUiEntryTest.java'],package+'PairUiEntryTest','PAIR ENTRY TESTS PASSED')
+        entry_count=int(entry_reply.split()[1]);assert entry_count>=49
+        pair_reply=compile_run('pair-protocol',[*pairing,test_package/'PairProtocolTest.java'],package+'PairProtocolTest','PASS 13 pairing protocol assertions')
         reply=compile_run('protocol',[source/'AddressProtocol.java',tests/'AddressProtocolTest.java'],'AddressProtocolTest','PASS 12 protocol assertions')
         sys.path.insert(0,str(ROOT/'workspace/skills/jingye-reconciliation/scripts'))
         import jingye_wireless_address as report
         assert report.decode(reply.strip().splitlines()[-1].encode(),bytes.fromhex('02'*32))[-1]=='192.168.50.100'
+        import jingye_wireless_pairing as pairing_protocol
+        exchange=pairing_protocol.PairExchange(dict(shared_key_hex='02'*32,reporter_id='03'*16),dict(host_key_sha256='05'*32),clock=lambda:0,wall=lambda:1794963600,nonce=lambda:'04'*32)
+        exchange.authorize();exchange.request(('192.168.50.100',12345));exchange.handle(pair_reply.strip().splitlines()[-1].encode(),('192.168.50.100',12345))
+        assert exchange.take()[:4]==('192.168.50.100',37111,'042819',37222)
     print(json.dumps(dict(passed=True,python=counts,python_total=sum(counts.values()),helper_state=41,
         helper_storage=9,trust_policy=56,trust_storage=14,window_session=9,java_protocol_assertions=12,
-        shared_protocol_vector=True,device_actions=0,network_actions=0)))
+        shared_protocol_vector=True,ssid_storage=19,pair_storage=22,pair_protocol_assertions=13,pair_ui=16,
+        pair_nodes=34,pair_entry=entry_count,java_python_encrypted_pairing_interop=True,device_actions=0,network_actions=0)))
     return 0
 
 if __name__=='__main__':raise SystemExit(main())
