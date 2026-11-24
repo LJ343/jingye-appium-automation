@@ -16,7 +16,9 @@ import re
 
 
 class CreationEvidenceError(RuntimeError):
-    pass
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
 
 
 def require(value, code):
@@ -69,10 +71,20 @@ def audit_suffix(raw, token):
                 and args[-1] == "io.appium.uiautomator2.server.test/androidx.test.runner.AndroidJUnitRunner"
                 and "Starting UIAutomator2 server" in segment):
             launched = True
-    require("instrumentation process cannot be initialized" in segment,
-            "creation_failure_not_instrumentation_start")
+    start_failure = "instrumentation process cannot be initialized" in segment
+    # A completed instrumentation start is not a completed master creation.
+    # Accept only the exact observed post-start transport failure, with the
+    # same exclusive failed request and no master addition established above.
+    initialized = re.search(r"The initialization of the instrumentation process took \d+ms", segment)
+    offline = re.search(r"\bdevice offline\b", segment)
+    transport_failure = bool(launched and initialized and offline
+                             and initialized.start() < offline.start())
+    require(start_failure or transport_failure,
+            "creation_failure_not_instrumentation_start_or_offline")
     return {"terminalFailed": True, "exclusiveRequest": True, "masterNotAdded": True,
             "instrumentationLaunchObserved": launched,
+            "failureStage": "initialized_then_device_offline" if transport_failure
+                            else "instrumentation_start_failed",
             "suffixSHA256": hashlib.sha256(raw).hexdigest()}
 
 
@@ -107,6 +119,50 @@ class FailureWitness:
 
     def _same_host(self):
         require(self.host_probe(self.port) == self.host, "creation_appium_host_changed")
+
+    def checkpoint(self):
+        """Private durable evidence saved before Remote, never a new baseline."""
+        return {"schema": 1, "host": self.host, "logName": self.path.name,
+                "fileId": list(self.file_id), "headerLength": len(self.header),
+                "headerSHA256": hashlib.sha256(self.header).hexdigest(),
+                "offset": self.offset, "token": self.token}
+
+    @classmethod
+    def restore(cls, checkpoint, host, host_probe, port, root=None):
+        require(isinstance(checkpoint, dict) and checkpoint.get("schema") == 1
+                and checkpoint.get("host") == host, "creation_checkpoint_invalid")
+        value = cls.__new__(cls)
+        value.host, value.host_probe, value.port = dict(host), host_probe, port
+        value.root = Path(root or os.environ.get("JINGYE_APPIUM_LOG_ROOT", r"D:\openclaw_data\logs\appium"))
+        name, token = checkpoint.get("logName"), checkpoint.get("token")
+        require(value.root.is_absolute() and isinstance(name, str)
+                and re.fullmatch(r"\d{8}T\d{9}Z-[0-9a-f]{32}\.stdout\.log", name)
+                and isinstance(token, str) and re.fullmatch(r"jingye-[0-9a-f]{32}", token),
+                "creation_checkpoint_identity_invalid")
+        born = dt.datetime.fromisoformat(host["createdAtUtc"].replace("Z", "+00:00"))
+        at = dt.datetime.strptime(name[:19], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=dt.timezone.utc)
+        require(-10 <= (at-born).total_seconds() <= 2, "creation_checkpoint_host_birth_mismatch")
+        file_id, length, offset = checkpoint.get("fileId"), checkpoint.get("headerLength"), checkpoint.get("offset")
+        require(isinstance(file_id, list) and len(file_id) == 2
+                and all(type(n) is int and n >= 0 for n in file_id)
+                and type(length) is int and 0 < length <= 16384
+                and type(offset) is int and offset >= length,
+                "creation_checkpoint_position_invalid")
+        value.path, value.token = value.root / name, token
+        value.file_id, value.offset, value.prefix_verified = tuple(file_id), offset, False
+        value._same_host()
+        with value.path.open("rb") as stream:
+            stat = os.fstat(stream.fileno())
+            require((stat.st_dev, stat.st_ino) == value.file_id, "creation_log_identity_changed")
+            value.header = stream.read(length)
+            require(hashlib.sha256(value.header).hexdigest() == checkpoint.get("headerSHA256")
+                    and b"Welcome to Appium" in value.header and b"listener started" in value.header,
+                    "creation_checkpoint_header_invalid")
+            require(stat.st_size >= offset, "creation_checkpoint_truncated")
+            stream.seek(offset-1)
+            require(stream.read(1) == b"\n", "creation_checkpoint_boundary_invalid")
+        value._same_host()
+        return value
 
     def verify(self):
         self._same_host()

@@ -41,6 +41,7 @@ class FakeClient:
         self.instrument = None; self.stop_error = False; self.stop_lost = False
         self.unknown_report = False; self.bad_cmdline = False; self.bad_uid = False
         self.finished_transition = False; self.transition_reads = 0
+        self.boot_id = '11111111-2222-4333-8444-555555555555'; self.uptime = 10.0
     def _operation(self): return nullcontext(300)
     def clock(self): return self.now
     def sleep(self, seconds): self.now += seconds
@@ -51,6 +52,10 @@ class FakeClient:
         out = ""; rc = 0
         if tail == ["shell", "ps", "-A", "-o", "PID,UID,NAME"]:
             out = "PID UID NAME\n" + (f"{self.pid} {self.uid} {PACKAGE}\n" if self.active else "")
+        elif tail == ["shell", "cat", "/proc/sys/kernel/random/boot_id", "/proc/uptime"]:
+            out = self.boot_id+'\n'+str(self.uptime)+' 0.00\n'
+        elif tail == ["shell", "getconf", "CLK_TCK"]:
+            out = '100\n'
         elif tail == ["shell", "dumpsys", "activity", "processes"]:
             if self.finished_transition and self.stops and not self.active and self.transition_reads == 0:
                 self.transition_reads += 1

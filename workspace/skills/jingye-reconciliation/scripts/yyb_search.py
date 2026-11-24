@@ -488,6 +488,8 @@ def create_appium_session(reason, max_attempts=2):
             try:
                 reservation = appium_guard.begin(APPIUM_SERVER_URL)
             except appium_guard.GuardError as exc:
+                _session_creation_outcome_uncertain = True
+                print("STATUS:YYB_PREVIOUS_SESSION_GUARD_UNRESOLVED|NO_NEW_REMOTE", flush=True)
                 raise AppiumSessionOwnershipError("wireless_appium_guard_refused_creation") from exc
         candidate = None
         remote_attempted = False
@@ -512,6 +514,13 @@ def create_appium_session(reason, max_attempts=2):
                 options.set_capability(appium_phone.OWNERSHIP_CAPABILITY, phone_owner.creation_token)
                 client = AppiumClientConfig(remote_server_addr=APPIUM_SERVER_URL, timeout=260, keep_alive=True)
                 phone_owner.begin_remote()
+                if phone_owner.failure_witness is not None:
+                    # Commit the original idle baseline and exact log position
+                    # before sending Remote; later clients must not invent one.
+                    reservation.bind_creation(phone_owner.creation_evidence())
+                else:
+                    print("STATUS:YYB_CREATION_CHECKPOINT_UNAVAILABLE|AUTO_CLEANUP_DISABLED", flush=True)
+                phone_owner.action_journal = reservation.phone_action
                 remote_attempted = True
                 candidate = webdriver.Remote(APPIUM_SERVER_URL, options=options, client_config=client)
                 candidate._jingye_guard_reservation = reservation
@@ -569,8 +578,13 @@ def create_appium_session(reason, max_attempts=2):
                 try:
                     receipt = phone_owner.finish_failed_creation()
                     reservation.failed_creation_closed(receipt)
-                except Exception:
-                    pass
+                except Exception as cleanup_error:
+                    # Fixed classification only: exception text may contain
+                    # private capabilities/transport information.
+                    cleanup_code = getattr(cleanup_error, "code", None)
+                    if not isinstance(cleanup_code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,100}", cleanup_code):
+                        cleanup_code = "failed_creation_cleanup_unconfirmed"
+                    print(f"STATUS:YYB_CREATION_CLEANUP_UNCONFIRMED|CODE:{cleanup_code}", flush=True)
                 else:
                     print("STATUS:YYB_CREATION_FAILED_CLEANED|RECONNECT_BEFORE_RETRY", flush=True)
                     if attempt < max_attempts:

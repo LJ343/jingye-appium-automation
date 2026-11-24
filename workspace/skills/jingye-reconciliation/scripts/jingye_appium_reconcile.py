@@ -164,10 +164,15 @@ def prove_cleanup_idle(guard,link,record,host,*,client_probe=query_client,clock=
     audit=audit_factory(host,record['sessionId'],deadline,clock,log_root)
     session_probe(guard.port,record['sessionId'],deadline,clock)
     owner=phone.PhoneOwnership(link,'http://127.0.0.1:'+str(guard.port),host,guard.host_probe)
+    baseline_forwards = []
+    if 'creationEvidence' in record:
+        owner.restore_creation(record['creationEvidence'], log_root=log_root)
+        baseline_forwards = owner.initial['forwards']
     require(clock()<deadline,'cleanup_reconciliation_budget_exhausted')
     with owner._operation(min(60,deadline-clock())) as phone_deadline:
         first=owner._snapshot(phone_deadline)
-        require(not first['processes'] and not first['instruments'] and not first['forwards'],'cleanup_phone_not_idle')
+        require(not first['processes'] and not first['instruments']
+                and not [r for r in first['forwards'] if r not in baseline_forwards], 'cleanup_phone_not_idle')
         second=owner._snapshot(phone_deadline)
         require(second==first,'cleanup_phone_snapshot_changed')
     original_client_gone(record,client_probe)
@@ -176,4 +181,49 @@ def prove_cleanup_idle(guard,link,record,host,*,client_probe=query_client,clock=
     require(guard._current_host()==host and clock()<deadline,'cleanup_host_or_budget_changed')
     return dict(originalClientGone=True,masterLogIdle=True,exactSessionTerminal=True,samePhoneVerified=True,
                 physicalIdleObservations=2,processCount=0,instrumentationCount=0,forwardCount=0,
-                masterLogPrefixSHA256=audit.prefix_sha256)
+                masterLogPrefixSHA256=audit.prefix_sha256,
+                preservedBaselineForwardCount=len(first['forwards']))
+
+
+def prove_failed_creation(guard, link, record, host, action, *, client_probe=query_client,
+                          log_root=None):
+    """Cross-client failed creation; no live/unknown master can use this path.
+
+    The canonical guard lock is held by the caller. A previous phone mutation,
+    including one with a lost response, is never repeated by another process.
+    Such records can only converge via two fresh physical-idle observations.
+    """
+    require(record.get('state') in {'creating', 'creation_unknown'}
+            and record.get('scope') == 'host' and record.get('host') == host
+            and record.get('sessionId') is None, 'creation_recovery_record_invalid')
+    original_client_gone(record, client_probe)
+    require(guard._current_host() == host, 'creation_recovery_host_changed')
+    owner = phone.PhoneOwnership(link, 'http://127.0.0.1:'+str(guard.port), host, guard.host_probe)
+    deadline = owner.client.clock()+300
+    owner.restore_creation(record.get('creationEvidence'), log_root=log_root)
+    receipt = owner.failure_witness.verify()
+    actions = record.get('phoneActions')
+    require(isinstance(actions, list) and all(isinstance(a, dict) for a in actions),
+            'creation_recovery_actions_invalid')
+    owner.action_journal = action
+    if actions:
+        # Even a confirmed signal may have been followed by a crash before
+        # its observation was durable. Never signal/allocate/remove again.
+        receipt = {**receipt, 'physicalTerminalVerified': True,
+                   'processCount': 0, 'instrumentationCount': 0, 'ownedForwardCount': 0,
+                   'priorMutationReadOnlyConvergence': True}
+    else:
+        receipt = owner.finish_failed_creation(budget=deadline-owner.client.clock())
+    with owner._operation(budget=deadline-owner.client.clock()) as deadline:
+        first = owner._snapshot(deadline)
+        require(not first['processes'] and not first['instruments']
+                and not [r for r in first['forwards'] if r not in owner.initial['forwards']],
+                'creation_recovery_physical_not_idle')
+        second = owner._snapshot(deadline)
+        require(second == first, 'creation_recovery_physical_changed')
+        owner.failure_witness.verify()
+    original_client_gone(record, client_probe)
+    require(guard._current_host() == host, 'creation_recovery_host_changed')
+    return {**receipt, 'originalClientGone': True, 'samePhoneVerified': True,
+            'physicalIdleObservations': 2,
+            'preservedBaselineForwardCount': len(first['forwards'])}

@@ -23,10 +23,12 @@ def load(wireless=True):
         pass
     class GuardError(RuntimeError):
         pass
-    reservation = SimpleNamespace(created=Mock(), uncertain=Mock(), closed=Mock(), host={"pid": 42})
+    reservation = SimpleNamespace(created=Mock(), uncertain=Mock(), closed=Mock(), host={"pid": 42},
+                                  bind_creation=Mock(), phone_action=Mock())
     phone = SimpleNamespace(capture=Mock(), finish_after_quit=Mock(), creation_token="offline-token",
                             creation_transport="198.51.100.10:40000", begin_remote=Mock(),
-                            finish_failed_creation=Mock(side_effect=RuntimeError("no terminal proof")))
+                            finish_failed_creation=Mock(side_effect=RuntimeError("no terminal proof")),
+                            failure_witness=None, creation_evidence=Mock())
     options = SimpleNamespace(set_capability=Mock())
     link = SimpleNamespace(is_enabled=Mock(return_value=wireless),
                            ensure_connected=Mock(return_value="198.51.100.10:40000"),

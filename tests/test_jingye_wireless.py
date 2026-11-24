@@ -27,6 +27,7 @@ def load_module():
     with mock.patch.object(subprocess, "run", side_effect=AssertionError("real subprocess forbidden")), \
          mock.patch.object(subprocess, "Popen", side_effect=AssertionError("real subprocess forbidden")):
         spec.loader.exec_module(module)
+    module.PINNED_ADB_PATH = ADB  # Synthetic path; runner never starts a process.
     return module
 
 

@@ -88,7 +88,7 @@ class DurableAppiumGuardTest(unittest.TestCase):
         cfg=self.path.parent/'wireless.json';cfg.write_text(json.dumps({'appium_guard_path':str(self.path)}))
         with patch.dict(os.environ,{'JINGYE_WIRELESS_ENABLED':'1','JINGYE_WIRELESS_CONFIG':str(cfg)}),\
              patch.object(self.module,'query_local_host',return_value=HOST),\
-             patch.dict(sys.modules,{'jingye_appium_reconcile':SimpleNamespace(prove_cleanup_idle=prover),'jingye_wireless':SimpleNamespace()}),\
+             patch.dict(sys.modules,{'jingye_appium_reconcile':SimpleNamespace(prove_cleanup_idle=prover,prove_failed_creation=Mock(side_effect=AssertionError('unexpected creation proof'))),'jingye_wireless':SimpleNamespace()}),\
              patch('builtins.print'):
             return self.module.begin(URL)
 

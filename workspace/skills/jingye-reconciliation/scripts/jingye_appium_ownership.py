@@ -276,6 +276,8 @@ class PhoneOwnership:
         self.cleanup_receipt = {}
         self.failure_witness = None
         self.failure_witness_error = None
+        self.action_journal = None
+        self.boot_marker = None
 
     def begin_remote(self):
         """Optional evidence, collected after idle prepare and before Remote.
@@ -286,16 +288,73 @@ class PhoneOwnership:
         _require(self.initial is not None and not self.initial["processes"]
                  and not self.initial["instruments"], "phone_failure_baseline_missing")
         try:
+            with self._operation() as deadline:
+                self.boot_marker = self._boot_marker(self.creation_transport, deadline)
             self.failure_witness = creation.FailureWitness(
                 self.host, self.host_probe, self.port, self.creation_token)
         except Exception:
             self.failure_witness_error = "creation_log_checkpoint_unavailable"
+
+    def creation_evidence(self):
+        _require(self.failure_witness is not None, "phone_failure_witness_missing")
+        return {"schema": 1, "initial": self.initial, "transport": self.creation_transport,
+                "witness": self.failure_witness.checkpoint(), "bootMarker": self.boot_marker}
+
+    def _boot_marker(self, serial, deadline):
+        raw = self._command(serial, ["shell", "cat", "/proc/sys/kernel/random/boot_id", "/proc/uptime"], deadline)
+        parts = raw.splitlines()
+        _require(len(parts) == 2 and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", parts[0])
+                 and re.fullmatch(r"[0-9]+\.[0-9]+ [0-9]+\.[0-9]+", parts[1]),
+                 "phone_boot_marker_invalid")
+        return {"bootId": parts[0], "uptime": float(parts[1].split()[0])}
+
+    def _verify_failure_process_birth(self, snapshot, deadline):
+        if self.boot_marker is None:
+            return  # Legacy in-process evidence only; not restorable across clients.
+        current = self._boot_marker(snapshot["serial"], deadline)
+        ticks = self._command(snapshot["serial"], ["shell", "getconf", "CLK_TCK"], deadline).strip()
+        _require(ticks.isdigit() and 1 <= int(ticks) <= 10000
+                 and current["bootId"] == self.boot_marker["bootId"], "phone_creation_boot_changed")
+        for row in snapshot["processes"]:
+            seconds = row["startTicks"] / int(ticks)
+            _require(self.boot_marker["uptime"]-1 <= seconds <= self.boot_marker["uptime"]+300
+                     and seconds <= current["uptime"], "phone_failed_creation_process_birth_outside_window")
+
+    def restore_creation(self, evidence, *, log_root=None):
+        """Restore original pre-Remote evidence; never capture a new idle baseline."""
+        _require(self.initial is None and isinstance(evidence, dict) and evidence.get("schema") == 1,
+                 "phone_creation_evidence_invalid")
+        initial = evidence.get("initial")
+        _require(isinstance(initial, dict) and initial.get("processes") == []
+                 and initial.get("instruments") == [] and isinstance(initial.get("serial"), str)
+                 and initial["serial"] == evidence.get("transport")
+                 and isinstance(initial.get("forwards"), list), "phone_creation_baseline_invalid")
+        # Parse the original forwards with the same strict production parser.
+        rows = initial["forwards"]
+        _require(all(isinstance(r, (list, tuple)) and len(r) == 3
+                     and all(isinstance(s, str) and s and not re.search(r"\s", s) for s in r)
+                     for r in rows), "phone_creation_baseline_forwards_invalid")
+        parsed = parse_forwards("".join(" ".join(r)+"\n" for r in rows))
+        _require(len(parsed) == len(rows), "phone_creation_baseline_forwards_invalid")
+        self.failure_witness = creation.FailureWitness.restore(
+            evidence.get("witness"), self.host, self.host_probe, self.port, log_root)
+        self.creation_token = self.failure_witness.token
+        self.initial = {**initial, "forwards": parsed, "instruments": tuple(initial["instruments"])}
+        self._creation_transport = initial["serial"]
+        marker = evidence.get("bootMarker")
+        _require(isinstance(marker, dict) and isinstance(marker.get("bootId"), str)
+                 and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", marker["bootId"])
+                 and type(marker.get("uptime")) in {int, float} and 0 <= marker["uptime"] < 1e10,
+                 "phone_creation_boot_evidence_missing")
+        self.boot_marker = marker
+        return self
 
     def _host_same(self):
         _require(self.host_probe(self.port) == self.host, "phone_owner_appium_host_changed")
 
     @contextmanager
     def _operation(self, budget=60):
+        _require(budget > 0, "phone_owner_budget_exhausted")
         self._host_same()
         with self.client._operation() as outer:
             deadline = self.client.clock() + budget
@@ -306,9 +365,21 @@ class PhoneOwnership:
 
     def _command(self, serial, args, deadline, timeout=15, *, global_command=False):
         _require(deadline > self.client.clock(), "phone_owner_budget_exhausted")
-        safe_read = (args == ["forward", "--list"] or args[:2] in (
+        safe_read = (args in (["forward", "--list"], ["shell", "getconf", "CLK_TCK"]) or args[:2] in (
             ["shell", "ps"], ["shell", "cat"], ["shell", "dumpsys"])
             or (args[:2] == ["shell", "run-as"] and len(args) > 3 and args[3] in {"id", "cat", "ls"}))
+        action = None
+        if not safe_read and self.action_journal is not None:
+            kind = ("forward_allocate" if args == ["forward", "--no-rebind", "tcp:0", "tcp:6790"]
+                    else "forward_remove" if args[:2] == ["forward", "--remove"] and len(args) == 3
+                    else "process_signal" if args[:2] == ["shell", "run-as"] and len(args) == 6
+                    and args[3:5] == ["sh", "-c"] else None)
+            _require(kind is not None, "phone_unclassified_mutation_refused")
+            action = uuid.uuid4().hex
+            # Durable intent precedes the command. A lost response or failed
+            # confirmation can only converge via read-only physical idle proof.
+            self.action_journal({"id": action, "kind": kind, "phase": "intent",
+                                 "serial": serial, "args": args})
         try:
             command = args if global_command else ["-s", serial, *args]
             result = self.client._exec(command, min(timeout, deadline - self.client.clock()), deadline=deadline)
@@ -320,6 +391,9 @@ class PhoneOwnership:
             if re.search(r"(?im)^(?:adb:\s*)?(?:error:\s*)?(?:device(?: [^\r\n]+)? (?:not found|offline)|no devices/emulators found|closed)\s*$", message):
                 raise CreationReadTransportError()
         _require(result.returncode == 0 and isinstance(result.stdout, str), "phone_owner_read_failed")
+        if action is not None:
+            self.action_journal({"id": action, "phase": "confirmed",
+                                 "result": result.stdout[:1024]})
         return result.stdout
 
     def _snapshot(self, deadline):
@@ -396,8 +470,8 @@ class PhoneOwnership:
             if failed_empty:
                 _require(self.failure_witness is not None, "phone_failure_witness_missing")
                 self.failure_witness.verify()
-                _require(creation.empty_sessions(response), "phone_failed_creation_downstream_not_empty")
-                session = None
+                session = (None if creation.empty_sessions(response)
+                           else session_token_identity(response, self.creation_token))
             else:
                 session = session_token_identity(response, self.creation_token)
             _require(self._socket_owner(serial, target, proof_deadline) == before_socket, "phone_proof_socket_changed")
@@ -406,7 +480,7 @@ class PhoneOwnership:
                      and after["instruments"] == snapshot["instruments"], "phone_creation_snapshot_changed")
             return {"method": "exclusive_failed_request_empty_server_pid_socket" if failed_empty
                             else "server_session_token_and_pid_socket", "downstreamSessionId": session,
-                    "tokenVerified": not failed_empty, "socket": before_socket, "stableSnapshotVerified": True}
+                    "tokenVerified": session is not None, "socket": before_socket, "stableSnapshotVerified": True}
         finally:
             # Remove only the precise mapping whose successful creation is known.
             # Unknown allocation or changed scope never permits a blanket remove.
@@ -421,7 +495,7 @@ class PhoneOwnership:
             _require(not any(row[1] == entry[1] for row in rows), "phone_proof_forward_cleanup_unverified")
             self.proof_forward["removed"] = True
 
-    def finish_failed_creation(self):
+    def finish_failed_creation(self, *, budget=300):
         """Only a completed, exclusive failed request can use this path.
 
         This deliberately does not call capture with a fabricated session ID.
@@ -435,7 +509,7 @@ class PhoneOwnership:
         _require(self.initial is not None and self.owned is None and self.session_id is None
                  and self.failure_witness is not None, "phone_failure_witness_missing")
         receipt = self.failure_witness.verify()
-        with self._operation(budget=300) as deadline:
+        with self._operation(budget=budget) as deadline:
             while True:
                 try:
                     snapshot = self._snapshot(deadline)
@@ -456,6 +530,7 @@ class PhoneOwnership:
                          and snapshot["instruments"][0]["finished"] is False
                          and snapshot["instruments"][0]["processCount"] == 1,
                          "phone_failed_creation_residual_unverified")
+                self._verify_failure_process_birth(snapshot, deadline)
                 self._prove_changed_creation(snapshot, deadline, failed_empty=True)
                 _require(self._snapshot(deadline) == snapshot, "phone_failed_creation_snapshot_changed")
                 self.failure_witness.verify()
@@ -488,6 +563,8 @@ class PhoneOwnership:
                         self._command(current["serial"], ["forward", "--remove", row[1]], deadline)
                     if not remaining:
                         self.failure_witness.verify()
+                        _require(self._snapshot(deadline) == current,
+                                 "phone_failed_creation_terminal_changed")
                         self.cleanup_receipt = {**receipt, "physicalTerminalVerified": True,
                             "processCount": 0, "instrumentationCount": 0, "ownedForwardCount": 0,
                             "signalsAttempted": len(self.stopped)}

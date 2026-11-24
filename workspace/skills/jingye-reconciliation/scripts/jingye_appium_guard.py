@@ -100,6 +100,12 @@ class Reservation:
     def failed_creation_closed(self, receipt):
         self.guard.failed_creation_closed(self, receipt)
 
+    def bind_creation(self, evidence):
+        self.guard.bind_creation(self, evidence)
+
+    def phone_action(self, event):
+        self.guard.phone_action(self, event)
+
 
 class SessionGuard:
     def __init__(self, path, server_url, *, host_probe=None):
@@ -120,6 +126,7 @@ class SessionGuard:
     def _lock(self):
         descriptor = None
         acquired = False
+        entered = False
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             descriptor = os.open(str(self.path) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
@@ -142,8 +149,11 @@ class SessionGuard:
                     if time.monotonic() >= deadline:
                         raise GuardError("appium_guard_lock_unavailable") from None
                     time.sleep(0.05)
+            entered = True
             yield
         except OSError:
+            if entered:
+                raise  # Phone/network exceptions are not journal I/O failures.
             raise GuardError("appium_guard_storage_unavailable") from None
         finally:
             if descriptor is not None:
@@ -244,6 +254,52 @@ class SessionGuard:
             record.update(state="active", sessionId=session_id, updatedAtUtc=_now())
             self._write(value)
 
+    def bind_creation(self, reservation, evidence):
+        encoded = json.dumps(evidence, ensure_ascii=True)
+        _require(len(encoded) <= 65536 and isinstance(evidence, dict)
+                 and evidence.get("schema") == 1 and isinstance(evidence.get("witness"), dict)
+                 and evidence["witness"].get("host") == reservation.host,
+                 "appium_guard_creation_evidence_invalid")
+        with self._lock():
+            value = self._read(); record = self._owned(value, reservation)
+            _require(record["state"] == "creating" and record["scope"] == "host"
+                     and self._current_host() == reservation.host == record["host"]
+                     and "creationEvidence" not in record,
+                     "appium_guard_creation_evidence_state_changed")
+            record["creationEvidence"] = json.loads(encoded)
+            record["phoneActions"] = []
+            self._write(value)
+
+    def _phone_action(self, value, event):
+        """Caller holds canonical lock, including across-process recovery."""
+        record = value["record"]
+        _require(isinstance(event, dict) and isinstance(event.get("id"), str)
+                 and re.fullmatch(r"[0-9a-f]{32}", event["id"])
+                 and record is not None, "appium_guard_phone_action_invalid")
+        actions = record.setdefault("phoneActions", [])
+        _require(isinstance(actions, list) and len(actions) < 64,
+                 "appium_guard_phone_action_limit")
+        existing = [a for a in actions if a.get("id") == event["id"]]
+        if event.get("phase") == "intent":
+            _require(not existing and event.get("kind") in
+                     {"forward_allocate", "forward_remove", "process_signal"},
+                     "appium_guard_phone_action_duplicate_or_invalid")
+            actions.append({**event, "atUtc": _now()})
+        else:
+            _require(event.get("phase") == "confirmed" and len(existing) == 1
+                     and existing[0].get("phase") == "intent",
+                     "appium_guard_phone_action_confirmation_invalid")
+            existing[0].update(phase="confirmed", result=event.get("result"), confirmedAtUtc=_now())
+        self._write(value)
+
+    def phone_action(self, reservation, event):
+        with self._lock():
+            value = self._read(); record = self._owned(value, reservation)
+            _require(record["scope"] == "host"
+                     and self._current_host() == record["host"] == reservation.host,
+                     "appium_guard_phone_action_host_changed")
+            self._phone_action(value, event)
+
     def uncertain(self, reservation, reason):
         _require(reason in {"creation_unknown", "cleanup_uncertain"}, "appium_guard_reason_invalid")
         with self._lock():
@@ -313,6 +369,39 @@ class SessionGuard:
             value['record']=None;self._write(value)
             return proof
 
+    def reconcile_creation(self, prover):
+        """Recover only a checkpointed, completed failed creation on this host."""
+        with self._lock():
+            value = self._read(); record = value['record']; host = self._current_host()
+            _require(record is not None and record['state'] in {'creating', 'creation_unknown'}
+                     and record['scope'] == 'host' and record['host'] == host
+                     and record.get('sessionId') is None
+                     and isinstance(record.get('creationEvidence'), dict)
+                     and isinstance(record.get('phoneActions'), list),
+                     'appium_guard_creation_reconciliation_not_eligible')
+            def action(event):
+                _require(self._current_host() == host and self._read() == value,
+                         'appium_guard_creation_reconciliation_state_changed')
+                self._phone_action(value, event)
+            proof = prover(json.loads(json.dumps(record)), dict(host), action)
+            _require(isinstance(proof, dict) and all(proof.get(k) is True for k in
+                     ('originalClientGone', 'terminalFailed', 'exclusiveRequest', 'masterNotAdded',
+                      'physicalTerminalVerified', 'samePhoneVerified'))
+                     and type(proof.get('physicalIdleObservations')) is int
+                     and proof['physicalIdleObservations'] == 2
+                     and all(type(proof.get(k)) is int and proof[k] == 0 for k in
+                             ('processCount', 'instrumentationCount', 'ownedForwardCount')),
+                     'appium_guard_creation_reconciliation_proof_missing')
+            _require(self._current_host() == host and self._read() == value,
+                     'appium_guard_creation_reconciliation_state_changed')
+            value['history'].append(dict(event='failed_creation_reconciled', atUtc=_now(),
+                                         previousRecord=record, proof=proof))
+            value['lastClosed'] = {**record, 'state': 'failed_creation_reconciled',
+                                   'closedAtUtc': _now(), 'cleanupReceipt': proof}
+            value['record'] = None
+            self._write(value)
+            return proof
+
 
 def begin(server_url):
     """Use the wireless JSON's directory, or its explicit appium_guard_path."""
@@ -334,13 +423,19 @@ def begin(server_url):
         try:
             return guard.begin()
         except GuardError as original:
-            if original.code!='appium_guard_same_host_unresolved':raise
-            from jingye_appium_reconcile import prove_cleanup_idle
+            if original.code not in {'appium_guard_same_host_unresolved',
+                                     'appium_guard_creation_outcome_unknown_across_hosts'}:raise
+            from jingye_appium_reconcile import prove_cleanup_idle, prove_failed_creation
             import jingye_wireless as link
             try:
-                guard.reconcile_cleanup(lambda record,host:prove_cleanup_idle(guard,link,record,host))
+                if original.code == 'appium_guard_creation_outcome_unknown_across_hosts':
+                    guard.reconcile_creation(lambda record,host,action:
+                        prove_failed_creation(guard,link,record,host,action))
+                else:
+                    guard.reconcile_cleanup(lambda record,host:prove_cleanup_idle(guard,link,record,host))
             except GuardError as exc:
-                if exc.code=='appium_guard_cleanup_reconciliation_not_eligible':raise original from exc
+                if exc.code in {'appium_guard_cleanup_reconciliation_not_eligible',
+                                'appium_guard_creation_reconciliation_not_eligible'}:raise original from exc
                 raise GuardError('appium_guard_cleanup_reconciliation_unconfirmed') from exc
             except Exception as exc:
                 raise GuardError('appium_guard_cleanup_reconciliation_unconfirmed') from exc
